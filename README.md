@@ -27,7 +27,7 @@ This fork is maintained by Volkybaba for the Anbernic **RG353V** (dArkOS) and Vo
 - Total audio loss on dArkOS fixed.
 - In-game grid names and Options player names widened to 12 characters.
 - Installer now finds the correct HP2 disc when several ISOs are present.
-- Custom jukebox (23 songs: Pop, Rock, Techno).
+- Custom jukebox (23 songs: Pop, Rock, Techno) — private, for Volkan only; NOT included in the public release.
 - Brightness setting in config.
 - Full unlocked profile included (all events, cars, tracks).
 - Analog steering (left stick) and triggers for gas/brake via SDL_GameController, plus RG353V gamepad mapping.
@@ -55,7 +55,7 @@ Bu fork, Volkybaba tarafından Anbernic **RG353V** (dArkOS) ve Volkyport için h
 - dArkOS'ta toplam ses kaybı düzeltildi.
 - Oyun içi grid isimleri ve Seçenekler oyuncu adları 12 karaktere genişletildi.
 - Kurulum artık birkaç ISO varken doğru HP2 diskini buluyor.
-- Özel jukebox (23 şarkı: Pop, Rock, Techno).
+- Özel jukebox (23 şarkı: Pop, Rock, Techno) — sadece Volkan'a özel; public sürümde YOK.
 - Config'de parlaklık ayarı.
 - Tam açık profil dahil (tüm etkinlikler, arabalar, pistler).
 - Analog direksiyon (sol stick) ve gaz/fren için tetikler (SDL_GameController), artı RG353V gamepad eşlemesi.
@@ -83,7 +83,7 @@ Este fork es mantenido por Volkybaba para la Anbernic **RG353V** (dArkOS) y Volk
 - Pérdida total de audio en dArkOS corregida.
 - Nombres de parrilla y de jugador en Opciones ampliados a 12 caracteres.
 - El instalador ahora encuentra el disco HP2 correcto cuando hay varias ISO.
-- Jukebox personalizado (23 canciones: Pop, Rock, Techno).
+- Jukebox personalizado (23 canciones: Pop, Rock, Techno) — privado, solo para Volkan; NO incluido en la versión pública.
 - Ajuste de brillo en la configuración.
 - Perfil totalmente desbloqueado incluido (todos los eventos, coches, pistas).
 - Dirección analógica (stick izquierdo) y gatillos para acelerar/frenar con SDL_GameController, más mapeo de mando RG353V.
