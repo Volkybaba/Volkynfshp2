@@ -145,6 +145,8 @@ int32_t demo_camera_coordinator_will_look_good(DemoCameraCoordinator *c,
 {
     // 0x0019a9d0. The faces are three ints and a pad each; their corners
     // are not bounded.
+    if (car == NULL)
+        return 0;
     const bVector2 *pt = (const bVector2 *)(const void *)&car->State.Position;
     const int32_t *face = (const int32_t *)cd->AreaFaces;
     int32_t i;
@@ -240,6 +242,8 @@ static CameraMover *build_highlight(DemoCameraCoordinator *c, int32_t idx,
 // the last one's, and the look-back flipped.
 static void build_drive_camera(DemoCameraCoordinator *c, struct Car *car)
 {
+    if (car == NULL)
+        return;
     const CarTypeInfo *ti = car->pCarTypeInfo;
     int32_t n, pov = 0;
 
@@ -264,6 +268,8 @@ void demo_camera_coordinator_update(DemoCameraCoordinator *c, float dt)
 {
     // 0x0019a4b8.
     struct Car *car = c->pCar;
+    if (car == NULL)
+        return;
     CameraMover *m = c->Base.pCameraMover;
     int32_t reload = c->Base.NeedToReloadCameraData;
     int32_t idx = -1;

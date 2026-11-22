@@ -9,6 +9,7 @@
 #include "bmath.h"
 #include "bmem.h"
 #include "eefpu.h"
+#include "logwriter.h"
 #include "texturepack.h"
 
 #define SOLID_LIST_ID       0x80034000u
@@ -258,16 +259,37 @@ int unloader_solid_list(uint8_t *chunk)
             eSolid *s = (eSolid *)align16(g + 8);
             eVertexAnimator *va = (eVertexAnimator *)s->pVertexAnimator;
 
-            s->Node.prev->next = s->Node.next;
-            s->Node.next->prev = s->Node.prev;
-            if (va != NULL) {
-                int n = va->NumSolids;
-                int i;
+            /* R36S v12: unlink only while the solid is still in
+               SolidList. A solid whose Node no longer points back at
+               itself was already unlinked (its file, or a file sharing
+               it, unloaded first); writing through its stale prev/next
+               segfaults the race-exit unload. The animator goes with
+               the unlink: an already-unlinked solid's animator was
+               already handled by the pass that unlinked it.
+               R36S v13: prev/next may be NULL or garbage themselves —
+               evaluating the guard on a NULL node segfaults before the
+               guard can save anything. */
+            if (s->Node.prev == NULL || s->Node.next == NULL) {
+                logwriter_put("DIAG unload: solid null node, skipped\n",
+                              sizeof("DIAG unload: solid null node, skipped\n") - 1);
+            } else if (s->Node.prev->next == &s->Node
+                && s->Node.next->prev == &s->Node) {
+                s->Node.prev->next = s->Node.next;
+                s->Node.next->prev = s->Node.prev;
+                if (va != NULL) {
+                    int n = va->NumSolids;
+                    int i;
 
-                for (i = 0; i < n; i++)
-                    va->SolidTable[i]->pVertexAnimator = NULL;
-                va->NumSolids = 0;
-                evertexanimator_delete(va, 3);
+                    for (i = 0; i < n && i < EVERTEXANIMATOR_MAX_SOLIDS; i++) {
+                        if (va->SolidTable[i] != NULL)
+                            va->SolidTable[i]->pVertexAnimator = NULL;
+                    }
+                    va->NumSolids = 0;
+                    evertexanimator_delete(va, 3);
+                }
+            } else {
+                logwriter_put("DIAG unload: solid already unlinked, skipped\n",
+                              sizeof("DIAG unload: solid already unlinked, skipped\n") - 1);
             }
         }
         eDirtySolids = 1;
@@ -365,9 +387,27 @@ void edelete_all_duplicated_solids(void)
 
 void efix_up_tables(void)
 {
-    if (eDisableFixUpTables)
+    /* R36S v18 DIAG: the race-exit crash is inside delete_file after
+       unload_chunks — this fixup (SolidList walk / model reconnect /
+       animation reconnect / texture lookups) is the prime suspect.
+       Log the dirty flags and each sub-step. */
+    {
+        char buf[80];
+        int n = snprintf(buf, sizeof buf,
+                         "DIAG unload: fixup enter S=%d T=%d A=%d\n",
+                         (int)eDirtySolids, (int)eDirtyTextures,
+                         (int)eDirtyAnimations);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+    }
+    if (eDisableFixUpTables) {
+        logwriter_put("DIAG unload: fixup disabled, done\n",
+                      sizeof("DIAG unload: fixup disabled, done\n") - 1);
         return;
+    }
     if (eDirtySolids || eDirtyTextures) {
+        logwriter_put("DIAG unload: fixup solids branch\n",
+                      sizeof("DIAG unload: fixup solids branch\n") - 1);
         if (eDirtyTextures) {
             bNode *n;
 
@@ -381,9 +421,17 @@ void efix_up_tables(void)
                     gCalcAutoKFn(s);
             }
         }
+        logwriter_put("DIAG unload: fixup before models\n",
+                      sizeof("DIAG unload: fixup before models\n") - 1);
         emodel_reconnect_all_models();
+        logwriter_put("DIAG unload: fixup after models\n",
+                      sizeof("DIAG unload: fixup after models\n") - 1);
+        logwriter_put("DIAG unload: fixup before anims\n",
+                      sizeof("DIAG unload: fixup before anims\n") - 1);
         if (gReconnectAllAnimationsFn != NULL)
             gReconnectAllAnimationsFn();
+        logwriter_put("DIAG unload: fixup after anims\n",
+                      sizeof("DIAG unload: fixup after anims\n") - 1);
         pTextureInfoRVMInfo = get_texture_info(0x0000dbd4u, 0, 0);
         pTextureInfoRVMMask = get_texture_info(0xcf29d0dfu, 0, 0);
         pTextureInfoSolidGrey = get_texture_info(0x32283a11u, 0, 0);
@@ -397,13 +445,19 @@ void efix_up_tables(void)
         eDirtySolids = 0;
         eDirtyTextures = 0;
         eDirtyAnimations = 0;
+        logwriter_put("DIAG unload: fixup done\n",
+                      sizeof("DIAG unload: fixup done\n") - 1);
         return;
     }
     if (eDirtyAnimations) {
+        logwriter_put("DIAG unload: fixup anims branch\n",
+                      sizeof("DIAG unload: fixup anims branch\n") - 1);
         if (gReconnectAllAnimationsFn != NULL)
             gReconnectAllAnimationsFn();
         eDirtyAnimations = 0;
     }
+    logwriter_put("DIAG unload: fixup done\n",
+                  sizeof("DIAG unload: fixup done\n") - 1);
 }
 
 void efix_falloff_ramp(void)

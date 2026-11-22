@@ -59,6 +59,13 @@ void emodel_reconnect_texture_table(eModel *m)
 {
     int i;
 
+    // R36S v44: ReplaceIndex has 16 slots. An instance index >= 16
+    // is out of bounds (and >= 128 wraps negative through the int8_t
+    // cast, writing before the table); a NULL table is nothing to
+    // reconnect. Skip the model rather than writing through a bad slot.
+    if (m->pReplacementTextureTable == NULL
+        || m->ReplacementTextureInstanceIndex >= 16)
+        return;
     for (i = 0; i < (int8_t)m->NumReplacementTextures; i++) {
         eReplacementTextureTable *r =
             (eReplacementTextureTable *)m->pReplacementTextureTable + i;
@@ -91,6 +98,12 @@ void emodel_apply_replacement_texture_table(eModel *m)
     int i;
 
     if (s == NULL)
+        return;
+    // R36S v44: same bound as emodel_reconnect_texture_table (see
+    // above): ReplaceIndex has 16 slots, and a NULL table is nothing
+    // to apply.
+    if (m->pReplacementTextureTable == NULL
+        || m->ReplacementTextureInstanceIndex >= 16)
         return;
     table = (eTextureTable *)s->pTextureTable;
     r = (eReplacementTextureTable *)m->pReplacementTextureTable;

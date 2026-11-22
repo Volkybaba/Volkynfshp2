@@ -22,17 +22,6 @@
 #include "flailer.h"
 #include "fred.h"
 #include "portlang.h"
-#ifdef NFSHP2_R36S
-#include "r36s_platform.h"
-
-// The R36S's: the hidden Customize P2 HUD row is Graphics, the speed
-// presets (r36s_quality: Full, Fast, Fastest), Left and Right cycling them
-// as the other rows' values. It saves itself (r36s_quality_set), so the
-// save prompt doesn't ask for it.
-#define GRAPHICS_ROW 8
-// The last row is Smoke: the particles and the smoke budget (r36s_smoke).
-#define SMOKE_ROW    9
-#endif
 
 // tScrollingMenuList's arrows and clip, and the value arrows.
 #define OBJ_SCROLL_UP   0xedf2e4eeu
@@ -223,42 +212,6 @@ typedef struct {
 
 static DisplayScreen sDisplay;
 
-#ifdef GRAPHICS_ROW
-static void redrawGraphics(DisplayScreen* d)
-{
-    static const int kPresets[3] = {
-        PORTLANG_GRAPHICS_FULL, PORTLANG_GRAPHICS_FAST,
-        PORTLANG_GRAPHICS_FASTEST,
-    };
-    // A LanguageID, not a string: the row's own text holds 16 characters.
-    flailer_set_language_id(d->inst.screen, BSCR_ITEM_MENUITEM(GRAPHICS_ROW),
-                            kPresets[r36s_quality()]);
-}
-
-static void cycleGraphics(DisplayScreen* d, int dir)
-{
-    r36s_quality_set((r36s_quality() + dir + 3) % 3);
-    redrawGraphics(d);
-    say("display: graphics %d", r36s_quality());
-}
-
-static void redrawSmoke(DisplayScreen* d)
-{
-    static const int kSmoke[3] = {
-        PORTLANG_SMOKE_FULL, PORTLANG_SMOKE_LESS, PORTLANG_SMOKE_LEAST,
-    };
-    flailer_set_language_id(d->inst.screen, BSCR_ITEM_MENUITEM(SMOKE_ROW),
-                            kSmoke[r36s_smoke()]);
-}
-
-static void cycleSmoke(DisplayScreen* d, int dir)
-{
-    r36s_smoke_set((r36s_smoke() + dir + 3) % 3);
-    redrawSmoke(d);
-    say("display: smoke %d", r36s_smoke());
-}
-#endif
-
 static void setOnOff(uint32_t screen, uint32_t object, int on)
 {
     flailer_set_language_id(screen, object, on ? LANG_ON : LANG_OFF);
@@ -376,21 +329,12 @@ static void displayConstruct(BGameFlow* gf, DisplayScreen* d, uint32_t screen)
     flailer_set_clip_to_poly(screen, OBJ_LEFT_ARROW, OBJ_SCROLL_CLIP);
     flailer_set_clip_to_poly(screen, OBJ_RIGHT_ARROW, OBJ_SCROLL_CLIP);
     // The port's: GrayMenuItem's mode 2 disables and hides both rows, so
-    // the menu passes over them. The R36S shows the first as Graphics and
-    // the last as Smoke, so its list scrolls, as retail's did, to them.
-#ifdef GRAPHICS_ROW
-    redrawGraphics(d);
-    redrawSmoke(d);
-#endif
+    // the menu passes over them.
     if (gf->hooks.grayMenuItem) {
-#ifndef GRAPHICS_ROW
         gf->hooks.grayMenuItem(gf->hooks.user, screen, BSCR_ITEM_MENUITEM(8),
                                BSCR_GRAY_HIDE);
-#endif
-#ifndef SMOKE_ROW
         gf->hooks.grayMenuItem(gf->hooks.user, screen, BSCR_ITEM_MENUITEM(9),
                                BSCR_GRAY_HIDE);
-#endif
     }
     // Options' Start took the snapshot; this is for a way in without it.
     if (!sEntryHeld) displayopts_start();
@@ -428,7 +372,7 @@ static void askToSave(BGameFlow* gf, DisplayScreen* d)
                        | BPOPUP_BUTTONS_BELOW;
     cfg.parent         = gf->screen;
     cfg.screen         = BPOPUP_SCREEN_MEMCARD;
-    cfg.message        = portlang_get(gf->currLanguage,
+    cfg.message        = portlang_get_list(gf->currLanguage,
                                       PORTLANG_SAVE_CHANGES, NULL);
     cfg.button[0]      = LANG_YES;
     cfg.button[1]      = LANG_NO;
@@ -504,39 +448,20 @@ static void displayEvent(BGameFlow* gf, DisplayScreen* d, BScreenMessage msg,
             say("display: to %s", CUSTOMHUD_NAME);
             bscr_optbase_exit(&d->inst, CUSTOMHUD_NAME);
             if (s) barrows_set(s, &d->arrows, 0);
-#ifdef GRAPHICS_ROW
-        } else if (row == GRAPHICS_ROW) {
-            cycleGraphics(d, 1);
-            if (data) data->noise = NOISE_RIGHT;
-        } else if (row == SMOKE_ROW) {
-            cycleSmoke(d, 1);
-            if (data) data->noise = NOISE_RIGHT;
-#endif
         } else if (data) {
             data->noise = NOISE_NONE;
         }
         return;
     case BMSG_MENUITEM_HIGHLIGHT: {
         // DoHighlight(0) on rows 7..9 is the arrows hidden, as Set(0) is.
-        uint32_t value  = row >= 1 && row <= 6 ? kDisplayValues[row - 1] : 0;
-        uint32_t arrows = value;
-        int      blurb  = row ? kDisplayBlurbs[row - 1] : 0;
-#ifdef GRAPHICS_ROW
-        // Its value is in the row's own text, so the arrows are about it.
-        if (row == GRAPHICS_ROW) {
-            arrows = BSCR_ITEM_MENUITEM(GRAPHICS_ROW);
-            blurb  = PORTLANG_GRAPHICS_BLURB;
-        } else if (row == SMOKE_ROW) {
-            arrows = BSCR_ITEM_MENUITEM(SMOKE_ROW);
-            blurb  = PORTLANG_SMOKE_BLURB;
-        }
-#endif
-        banim_blurb_new_text_id(bscr_anim(), &d->inst.blurbAnim, blurb);
+        uint32_t value = row >= 1 && row <= 6 ? kDisplayValues[row - 1] : 0;
+        banim_blurb_new_text_id(bscr_anim(), &d->inst.blurbAnim,
+                                row ? kDisplayBlurbs[row - 1] : 0);
         bscr_optbase_highlight(&d->inst, data, bscroll_current_mask(&d->list));
         // The second bloom on the value, after the base's highlight, which
         // the port's puts on the row.
         banim_highlight_set_item(bscr_anim(), &d->inst.bloom2, value);
-        if (s) barrows_set(s, &d->arrows, arrows);
+        if (s) barrows_set(s, &d->arrows, value);
         return;
     }
     case BMSG_MENUITEM_PAD_LEFT:
@@ -575,16 +500,6 @@ static void displayEvent(BGameFlow* gf, DisplayScreen* d, BScreenMessage msg,
             say("display: zone cams %d", d->data.ZoneCams);
             if (data) data->noise = NOISE_LEFT;
             break;
-#ifdef GRAPHICS_ROW
-        case GRAPHICS_ROW:
-            cycleGraphics(d, dirOf(msg));
-            if (data) data->noise = noiseOf(msg);
-            break;
-        case SMOKE_ROW:
-            cycleSmoke(d, dirOf(msg));
-            if (data) data->noise = noiseOf(msg);
-            break;
-#endif
         default:
             break;
         }
@@ -596,13 +511,7 @@ static void displayEvent(BGameFlow* gf, DisplayScreen* d, BScreenMessage msg,
         if (row == 1 && data) data->param = 1;
         return;
     case BMSG_MENUITEM_PAD_DOWN:
-#ifdef SMOKE_ROW
-        if (row == SMOKE_ROW && data) data->param = 1;
-#elif defined(GRAPHICS_ROW)
-        if (row == GRAPHICS_ROW && data) data->param = 1;
-#else
         if (row == 7 && data) data->param = 1;
-#endif
         return;
     case BMSG_SCREEN_BACK_BUTTON:
         if (data) displayBack(gf, d, data);

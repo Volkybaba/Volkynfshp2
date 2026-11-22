@@ -222,6 +222,16 @@ static const int32_t kCreditsRoll[] = { 800082, 800083, 800084, 0 };
 // Retail's are 802200 Select controller category, 802201 Adjust Vibration
 // setting, 802202 and 802203. The port's page has one row and no rumble.
 static const int32_t kPreConfig[]   = { 802202, 802203, 0 };
+// v57: the Configuration page's ("Joystick Config Port1") HELP lines, so
+// Y summons the HELP panel there and helpmenu_is_active answers it --
+// without them the toggle's summon returns on NULL lines and the panel
+// never comes up (helpmenu.c). The two controller lines are the ones that
+// fit the page: 802202 Enter controller adjustment, 802203 Back to
+// Controller Options. (802200 Select controller category and 802201 Adjust
+// Vibration setting belong to the PreConfig page, and the port has no
+// rumble.) The page's own instructions stay in the bottom popup
+// (CONTROLS_BLURB), shown on Help via joyconfigPanelUp (main.c).
+static const int32_t kJoyConfig[]   = { 802202, 802203, 0 };
 
 static const struct {
     const char    *name;
@@ -252,6 +262,7 @@ static const struct {
     { "EACredits",            kCreditsRoll },
     { "BBGCredits",           kCreditsRoll },
     { "Joystick PreConfig",   kPreConfig },
+    { "Joystick Config Port1", kJoyConfig },
 };
 
 const int32_t *helpmenu_screen_lines(const char *name)

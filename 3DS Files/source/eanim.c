@@ -1,8 +1,10 @@
 // eanim -- see eanim.h.
 
 #include "eanim.h"
+#include "logwriter.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "bchunk.h"
@@ -81,13 +83,60 @@ int eanim_unloader(uint8_t *chunk)
 
     if (bchunk_u32(chunk) != EANIMATION_CHUNK_ID)
         return 0;
+    /* R36S v17 DIAG: entered for a real eanim chunk — with the
+       matching "done" below, the next log shows whether the crash is
+       inside this unloader or after it returns. */
+    {
+        char buf[64];
+        int n = snprintf(buf, sizeof buf, "DIAG unload: eanim enter %p\n",
+                         (void *)chunk);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+    }
     // Retail takes the solid at chunk + 16, where the loader's is for a
     // 16-aligned chunk; the loader's address is the same there and right
     // for any other.
     s = (eAnimationSolid *)(((uintptr_t)chunk + 31) & ~(uintptr_t)15);
     eDirtyAnimations = 1;
-    s->Node.prev->next = s->Node.next;
-    s->Node.next->prev = s->Node.prev;
+    /* R36S v17: combined guard. Walk the list first, without touching
+       s->Node (v15's guard read s->Node.prev/next to test them, but if
+       the chunk's solid was never listed s itself is stale and that
+       read segfaults before any DIAG). Then check the doubly-linked
+       invariant before unlinking (v16's walk checked membership only;
+       a listed node with stale prev/next makes the unlink write
+       through bad pointers and corrupt the heap — the crash then
+       lands later, in bFree/post_load_fixup, with no DIAG after the
+       chunk). Unlink only if both pass. */
+    {
+        bNode *n;
+        int found = 0;
+        for (n = eAnimationSolidList.next; n != &eAnimationSolidList;
+             n = n->next) {
+            if (n == &s->Node) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found)
+            logwriter_put("DIAG unload: eanim not in list, skipped\n",
+                          sizeof("DIAG unload: eanim not in list, skipped\n") - 1);
+        else if (s->Node.prev == NULL || s->Node.next == NULL
+                 || s->Node.prev->next != &s->Node
+                 || s->Node.next->prev != &s->Node)
+            logwriter_put("DIAG unload: eanim stale node, skipped\n",
+                          sizeof("DIAG unload: eanim stale node, skipped\n") - 1);
+        else {
+            s->Node.prev->next = s->Node.next;
+            s->Node.next->prev = s->Node.prev;
+        }
+    }
+    {
+        char buf[64];
+        int n = snprintf(buf, sizeof buf, "DIAG unload: eanim done %p\n",
+                         (void *)chunk);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+    }
     return 1;
 }
 
