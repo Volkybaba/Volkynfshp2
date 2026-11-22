@@ -1,6 +1,6 @@
-# Need for Speed: Hot Pursuit 2 for R36S & PortMaster Handhelds
+# Need for Speed: Hot Pursuit 2 for R36S & Volkyport Handhelds
 
-An unofficial native port of the PlayStation 2 version of **Need for Speed: Hot Pursuit 2** (2002) to Linux handhelds (R36S, Anbernic RG35XX/RG34XX, Powkiddy, RK3326, Allwinner H700, and other PortMaster-compatible devices), with continued support for the New Nintendo 3DS.
+An unofficial native port of the PlayStation 2 version of **Need for Speed: Hot Pursuit 2** (2002) to Linux handhelds (R36S, Anbernic RG35XX/RG34XX, Powkiddy, RK3326, Allwinner H700, and other Volkyport-compatible devices), with continued support for the New Nintendo 3DS.
 
 It is the PS2 game itself, not an emulator or a remake: the code was reverse-engineered function-by-function from the retail PAL disc (`SLES-50731`) and reimplemented in C. It runs from your own disc's assets, which you install on the device. Every PS2 release is supported: USA SLUS-20362, Europe SLES-50731 (v1.00 or v2.00), Asia SLPM-65181 or Korea SLPM-67527 (see [docs/releases.md](docs/releases.md)). **No proprietary game data is distributed with this repository.**
 
@@ -29,11 +29,11 @@ It is the PS2 game itself, not an emulator or a remake: the code was reverse-eng
 
 ---
 
-## Installation (PortMaster / Linux Handhelds)
+## Installation (Volkyport / Linux Handhelds)
 
 ### Method A: Automated On-Device Installation from ISO (Recommended)
 
-1. Copy the PortMaster package (`NFSHP2.sh` and the `nfshp2/` directory) to your SD card's `ports/` directory (e.g. `roms/ports/` or `ports/`).
+1. Copy the Volkyport package (`NFSHP2.sh` and the `nfshp2/` directory) to your SD card's `ports/` directory (e.g. `roms/ports/` or `ports/`).
 2. Copy your PS2 disc ISO image (USA `SLUS-20362`, Europe `SLES-50731` v1.00 or v2.00, Asia `SLPM-65181` or Korea `SLPM-67527`) to:
    ```
    ports/nfshp2/gamedata/your_disc.iso
@@ -84,7 +84,7 @@ If your device firmware does not have `python3`, or you prefer faster extraction
 
 | Combination | Action |
 | --- | --- |
-| **Select + Start** *(hold 1 sec)* | Clean exit to frontend / PortMaster |
+| **Select + Start** *(hold 1 sec)* | Clean exit to frontend / Volkyport |
 | **Select + L1** *(or L3 / R3)* | Toggle FPS & Performance Monitor Overlay |
 | **Select + R1** | Toggle D-Pad and Left Analog Stick Swap |
 | **Select + R2** | Cycle Graphics Preset (0 = Full, 1 = Fast, 2 = Fastest) |
@@ -161,17 +161,17 @@ Enter these 8-button sequences on the Main Menu to unlock bonus cars, tracks, an
 The build is automated inside Docker:
 
 ```bash
-# 32-bit ARM build (recommended for R36S / PortMaster)
+# 32-bit ARM build (recommended for R36S / Volkyport)
 sh r36s/build.sh
 
 # 64-bit ARM build
 ARCH=aarch64 sh r36s/build.sh
 
-# Package into PortMaster zip and folder layout
+# Package into Volkyport zip and folder layout
 sh r36s/package.sh
 ```
 
-The resulting package is output to `r36s/build/portmaster/nfshp2.zip`.
+The resulting package is output to `r36s/build/volkyport/nfshp2.zip`.
 
 ### New Nintendo 3DS
 
@@ -187,7 +187,7 @@ Generates `3DS Files/NFSHP2-3DS.3dsx` and `NFSHP2-3DS.cia`.
 
 ## Project Structure
 
-- `r36s/` -- R36S / Linux handheld compatibility layer (`r36s/compat`), GL worker thread, PortMaster launcher (`NFSHP2.sh`), ISO installer, and Dockerfiles.
+- `r36s/` -- R36S / Linux handheld compatibility layer (`r36s/compat`), GL worker thread, Volkyport launcher (`NFSHP2.sh`), ISO installer, and Dockerfiles.
 - `3DS Files/` -- Source code of the reverse-engineered game engine in C.
 - `tools/` -- Extraction and conversion tools (`zdir_extract.py`, `audio_pack.py`, `make_card.py`).
 - `docs/` -- Architecture documentation, R36S optimization backlog, and reverse-engineered file format specs.
@@ -199,7 +199,7 @@ Generates `3DS Files/NFSHP2-3DS.3dsx` and `NFSHP2-3DS.cia`.
 
 - **Electronic Arts & EA Black Box:** Original creators of Need for Speed: Hot Pursuit 2.
 - **Octoblimp & Contributors:** Complete PS2 game decompilation and New Nintendo 3DS port.
-- **Manuel Peña Llull ([@manuelpllull](https://github.com/manuelpllull)):** R36S / Linux handheld port, GLES rendering layer, GL threading, single-screen framing, PortMaster integration, and engine audio fixes.
+- **Manuel Peña Llull ([@manuelpllull](https://github.com/manuelpllull)):** R36S / Linux handheld port, GLES rendering layer, GL threading, single-screen framing, Volkyport integration, and engine audio fixes.
 - **AI Pairing:** Developed in collaboration with Claude Opus 5.5 and Antigravity (Google DeepMind).
 
 ---
