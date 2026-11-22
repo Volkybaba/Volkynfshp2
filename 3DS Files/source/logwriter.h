@@ -15,7 +15,7 @@
 // The writer gathers two seconds of lines at a time and writes whole
 // 512-byte sectors, the part-sector tail held for the next batch (five
 // seconds at most), through a 32 KB FILE buffer. And only when
-// sdmc:/nfshp2_config.txt says "DebugLog 1": main.c opens no log otherwise
+// nfshp2.cfg says "DebugLog=1": main.c opens no log otherwise
 // (configitems.h). The 2026-10-11 device crashes (Process9, an Arm9 data
 // abort) were first blamed on the log's writes; they went on with no log,
 // and the Luma dump has Process9 reading the cop speech's ENGLISHDAT.PCK,

@@ -19,9 +19,13 @@
 // languages: LONGEST holds each ID's longest translation in any language so
 // layouts can be tested against the worst case, and ID_NUM maps each ID to
 // its own number as text so a QA build can read IDs off the screen.
+// Turkish (R36S) is the port's first language; the retail files keep their
+// own values, so English through Swedish are unchanged and only the tools
+// move. The kLanguages list order (main.c) is Turkish first, and the FE
+// file's own LanguageEnum is what langtab_get passes to portlang.
 typedef enum {
     LANG_EN = 0, LANG_FR, LANG_DE, LANG_IT, LANG_ES, LANG_SE,
-    LANG_LONGEST, LANG_ID_NUM,
+    LANG_TR, LANG_LONGEST, LANG_ID_NUM,
 } LangEnum;
 
 typedef struct {

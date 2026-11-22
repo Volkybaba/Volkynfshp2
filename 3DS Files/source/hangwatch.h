@@ -16,8 +16,8 @@
 //     are. Again at 10 s and every 30 s, and once more if frames come back.
 //     Not while the loop waits in aptMainLoop: that is HOME or sleep.
 //
-//   * The timing frame, every 10 s of a race when nfshp2_config.txt says
-//     "GPULog 1" (configitems.h; until 2026-10-18 an empty
+//   * The timing frame, every 10 s of a race when nfshp2.cfg says
+//     "GPULog=1" (configitems.h; until 2026-10-18 an empty
 //     sdmc:/nfshp2_gputiming.txt), and never otherwise: each one
 //     is a hitch of about 150 ms, and the build the user plays has to be
 //     smooth (2026-10-05). At the end of each draw stage the commands so

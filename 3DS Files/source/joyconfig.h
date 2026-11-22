@@ -68,12 +68,14 @@ uint32_t joyconfig_input(uint32_t down);
 // uirender's gUiHelpLayoutFn.
 int32_t joyconfig_help_layout(void);
 
+// v57: whether the Configuration page is up and waiting for the cursor's
+// new key (a rebind in progress). The bottom panel is the wait prompt then
+// ("$NAME icin yeni tusa bas. START iptal eder."), so it stays up even
+// though Help is not active. For main.c's joyconfigPanelUp.
+int32_t joyconfig_is_waiting(void);
+
 // The bottom screen's body and hint while the Configuration page is up
 // with no popup over it, in HELPGLYPH_LAYOUT_KEYS's help characters; NULL
 // otherwise.
 const char* joyconfig_bottom_body(void);
 const char* joyconfig_bottom_hint(void);
-
-// One screen: whether the page's panel should be over it -- the help key
-// summoned it, or the page waits for an action's new key, which it names.
-int joyconfig_panel_wanted(void);

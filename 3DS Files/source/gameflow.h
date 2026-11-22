@@ -326,6 +326,9 @@ typedef struct {
     // back FRONTB, the frontend's one resource file (frontres.h). Not
     // traced either.
     void (*unloadFrontEnd)(void* user);
+    // R36S: the main menu's "Oyundan Cik" item. Asks the host to leave
+    // the main loop, so the game shuts down cleanly as on Select+Start.
+    void (*requestQuit)(void* user);
 
     // Transcript. Every observable step calls this, which is what
     // tools/bootflow_check.py diffs.
@@ -397,6 +400,8 @@ typedef struct {
     // The port's trace: OnTick animates all three members on every tick,
     // and the trace says so once after the constructor.
     int            tracedAnimate;
+    // The port's: the Exit Game confirmation popup is up (R36S).
+    int            askingExit;
 } BNewMainMenu;
 
 struct BGameFlow {
@@ -457,7 +462,7 @@ struct BGameFlow {
     int currLanguage;
     int speechLoaded;
     int logoFrench;           // gp-21404: the LOADING art is LOADING_FR
-    int loadAllLanguages;     // gp-16016, MENUITEM_7 of the language screen
+    int loadAllLanguages;     // gp-16016, MENUITEM_8 of the language screen
     int copsOn;               // 0x002f3fdc -- which of the two Mode Selects
 
     // Port-only. MumboJumboScreen::ShouldSeeLegalScreen (0x0016a648) and
@@ -714,6 +719,7 @@ void bgf_language_screen_callback(BGameFlow* gf, BScreenMessage msg,
 // than the screen authors.
 #define BGF_MI_4_MASK        0x75345d33u
 #define BGF_MI_5_MASK        0x778985d4u
+#define BGF_MI_6_MASK        0x79deae75u   // bhash("MI_6_MASK"), Exit row
 // The blurb's two text objects and its wipe (the constructor's hashes).
 #define BGF_OBJ_SCROLLING_TEXT 0x75980cf0u
 #define BGF_OBJ_WHITEOUT_BAR   0x70a404ecu
@@ -726,15 +732,18 @@ void bgf_language_screen_callback(BGameFlow* gf, BScreenMessage msg,
 // the lobby, lobby.h's LOBBY_SCREEN_NAME. The fifth is "Debug Menu",
 // hidden until revealed (the L + R + D-Pad Up chord, or "DebugMenu 1"),
 // with MI_5_MASK, the last of the constructor's five; it leads to the
-// port's own screen.
+// port's own screen. The sixth is "Oyundan Cik" (Exit Game, R36S),
+// always shown under Options, with MI_6_MASK; it asks the host to leave
+// the main loop, so the game shuts down as on Select+Start.
 #define BGF_ITEM_MENUITEM_4  0x52e039f6u
 #define BGF_ITEM_MENUITEM_5  0x52e039f7u
-#define BGF_LOCAL_WIRELESS_NAME "Local Wireless"
+#define BGF_LOCAL_WIRELESS_NAME "Yerel Kablosuz"
 #define BGF_DEBUG_MENU_NAME  "Port Debug Menu"
-// The language screen's: MENUITEM_1..6 are the six languages in
-// e_Languages order, MENUITEM_7 is Load All Languages.
+// The language screen's: MENUITEM_1..7 are the seven languages in
+// kLanguages order (Turkish first), MENUITEM_8 is Load All Languages.
 #define BGF_ITEM_MENUITEM_6  0x52e039f8u
 #define BGF_ITEM_MENUITEM_7  0x52e039f9u
+#define BGF_ITEM_MENUITEM_8  0x52e039fau
 
 // NewMainMenu::Callback, retail's (0x00216a10; the demo's is 0x00203a48).
 void bgf_new_main_menu_callback(BGameFlow* gf, BScreenMessage msg,

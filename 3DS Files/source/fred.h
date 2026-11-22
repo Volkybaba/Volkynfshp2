@@ -205,6 +205,20 @@ void init_fred(void);
 // FrontendDatabase::InitWithDefaults, 0x00183830.
 void fred_init_with_defaults(FrontendDatabase *f);
 
+// On a language change, after the new language's FE file is loaded: a
+// stored player name that is still a default in some language is re-named
+// in the new language; a name the player typed is left alone. The renamed
+// name lives in the in-memory Fred only, until the next save.
+void fred_retranslate_default_player_names(void);
+
+// The config file's "PlayerName <name>" line (configitems.h): write it
+// over Player 1's stored name. 1 when a name was set (the file has the
+// line and it is not empty), 0 when there is none. The name then persists
+// through the normal save path, and a language change must not replace it
+// — it is a name the player chose, like one typed on the Player Names
+// screen, which cannot type on this device.
+int fred_apply_config_player_name(void);
+
 // FrontendDatabase::MakeChallengeCarsAvailable, 0x00183af8. Each valid car
 // type's status for both players from its lock statuses and
 // IsCarUnlocked, with all its skins and no dash. You're The Cop (game

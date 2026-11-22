@@ -10,16 +10,12 @@
 // is, once, and hands out paths inside it.
 //
 // Resolution order, first hit wins:
-//   1. nfshp2_config.txt, looked for next to the executable and then in
-//      sdmc:/3ds/NFSHP2-3DS/. Its first non-empty, non-'#' line is the data
-//      directory. A relative path there is relative to sdmc:/.
-//   2. sdmc:/3ds/NFSHP2-3DS/data
-//   3. sdmc:/NFSHP2
+//   1. sdmc:/3ds/NFSHP2-3DS/data
+//   2. sdmc:/NFSHP2
 // A directory only counts when GLOBAL/GLOBALB.BUN is actually in it, so a
-// stale config file falls through to a working default instead of leaving
+// stale pointer falls through to a working default instead of leaving
 // the game pointed at nothing.
 
-#define GAMEDATA_CONFIG  "nfshp2_config.txt"
 #define GAMEDATA_MAX_PATH 256
 
 // A file every extract has, used to recognise a real data directory.
@@ -40,11 +36,3 @@ char* gamedata_path(const char* rel, char* out, size_t cap);
 
 // Whether a path inside the data directory exists.
 bool gamedata_exists(const char* rel);
-
-// The game's VIDEO_MODE for this install: 0 PAL, 1 NTSC. The PS2 game is
-// PAL when the disc has PAL.TAG (InitDisplaySystem's bFileExists), which
-// only the European discs do. An install with RELEASE.TXT and no PAL.TAG is
-// from an NTSC disc (USA, Asia, Korea; tools/release.py). One with neither
-// predates the other releases' support, when only the PAL disc installed,
-// so it is PAL. NFSHP2_REGION=PAL or NTSC in the environment overrides it.
-int gamedata_video_mode(void);
