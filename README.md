@@ -6,6 +6,8 @@ It is the PS2 game itself, not an emulator or a remake: the code was reverse-eng
 
 ## What's New in This Fork (Volkynfshp2)
 
+**Note:** This repository contains v59. Changes made up to v63 will be updated separately.
+
 This fork is maintained by Volkybaba for the Anbernic **RG353V** (dArkOS) and Volkyport. It is based on the upstream NFSHP2-R36S port, with the following changes from the original:
 
 ### RG353V & Volkyport
@@ -15,7 +17,7 @@ This fork is maintained by Volkybaba for the Anbernic **RG353V** (dArkOS) and Vo
 
 ### Turkish
 - Full Turkish translation (menus, HUD, dialogs) in ASCII Turkish, no diacritics. Turkish is the first language.
-- Player name is set from the config file (`PlayerName`), no in-game keyboard needed.
+- Player name can be changed by editing the config file (`PlayerName=...`); no in-game keyboard needed.
 - 7 languages: Turkish (added), English, French, German, Italian, Spanish, Swedish.
 
 ### Fixes & Improvements (up to v63)
@@ -34,6 +36,8 @@ This fork is maintained by Volkybaba for the Anbernic **RG353V** (dArkOS) and Vo
 
 ## Bu Fork'ta Neler Yeni (Volkynfshp2)
 
+**Not:** Bu depoda v59 var. v63'e kadar yapılan değişiklikler ayrıca güncellenecek.
+
 Bu fork, Volkybaba tarafından Anbernic **RG353V** (dArkOS) ve Volkyport için hazırlanmıştır. Upstream NFSHP2-R36S portunu temel alır, orijinalinden farkları şunlardır:
 
 ### RG353V & Volkyport
@@ -43,7 +47,7 @@ Bu fork, Volkybaba tarafından Anbernic **RG353V** (dArkOS) ve Volkyport için h
 
 ### Türkçe
 - Tam Türkçe çeviri (menüler, HUD, diyaloglar), ASCII Türkçe, aksansız. Türkçe birinci dildir.
-- Oyuncu adı config dosyasından ayarlanır (`PlayerName`), oyun içi klavye gerekmez.
+- Oyuncu adı config dosyasından değiştirilebilir (`PlayerName=...`); oyun içi klavye gerekmez.
 - 7 dil: Türkçe (eklendi), İngilizce, Fransızca, Almanca, İtalyanca, İspanyolca, İsveççe.
 
 ### Düzeltmeler & İyileştirmeler (v63'e kadar)
@@ -62,6 +66,8 @@ Bu fork, Volkybaba tarafından Anbernic **RG353V** (dArkOS) ve Volkyport için h
 
 ## Novedades de este fork (Volkynfshp2)
 
+**Nota:** Este repositorio contiene la v59. Los cambios hasta la v63 se actualizarán por separado.
+
 Este fork es mantenido por Volkybaba para la Anbernic **RG353V** (dArkOS) y Volkyport. Se basa en el port upstream NFSHP2-R36S, con los siguientes cambios respecto al original:
 
 ### RG353V & Volkyport
@@ -71,7 +77,7 @@ Este fork es mantenido por Volkybaba para la Anbernic **RG353V** (dArkOS) y Volk
 
 ### Turco
 - Traducción completa al turco (menús, HUD, diálogos) en turco ASCII, sin diacríticos. El turco es el primer idioma.
-- El nombre del jugador se ajusta desde el archivo de configuración (`PlayerName`), no se necesita teclado en el juego.
+- El nombre del jugador se puede cambiar editando el archivo de configuración (`PlayerName=...`); no se necesita teclado en el juego.
 - 7 idiomas: turco (añadido), inglés, francés, alemán, italiano, español, sueco.
 
 ### Correcciones y mejoras (hasta v63)
