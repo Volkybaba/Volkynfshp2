@@ -75,7 +75,7 @@ typedef struct BGameFlow BGameFlow;
 // BGF_LOCAL_WIRELESS_NAME, the main menu's way here), where a select of
 // two players goes on the 3DS (bsetup.c), and where the host sets the
 // race up.
-#define LOBBY_SCREEN_NAME  "Local Wireless"
+#define LOBBY_SCREEN_NAME  "Yerel Kablosuz"
 #define LOBBY_SETUP_SCREEN "Challenge"
 #define LOBBY_NEXT_SCREEN "Select Car"
 

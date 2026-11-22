@@ -28,9 +28,15 @@
 // FlailerScreenConfig's hash for "NameEntry".
 #define NAMEENTRY_SCREEN 0x617a4e0au
 
-// tKeyboard's StringLength + 1: the cursor stops at 6, and the EditBuffer
-// is eight bytes with its last always 0.
-#define NAMEENTRY_MAX_CHARS 7
+// tKeyboard's StringLength + 1: the cursor stops at 10, and the EditBuffer
+// is twelve bytes with its last always 0. v41 raised this from 7 (the
+// retail 3DS keyboard's limit) to 11 so it matches PlayerName[12]
+// (SETNAME_COPY/FRED_NAME_COPY = 11): a config PlayerName of 11 chars no
+// longer gets cut to 7 when the name row is touched, and the menu row
+// (whose FRONTB.BUN MaxChars went 8 -> 12 at the same time) shows all 11.
+// The swkbd stub returns the initial text at once, so the keyboard UI's
+// seven character boxes never open on this device.
+#define NAMEENTRY_MAX_CHARS 11
 
 // What the screen needs of main.c.
 typedef struct {
