@@ -1,7 +1,7 @@
-# PortMaster testers post (draft, not posted)
+# Volkyport testers post (draft, not posted)
 
-For the PortMaster Discord's testing thread, in the format of the THUG
-test-build post. Attach `r36s/build/portmaster/nfshp2.zip` where it says
+For the Volkyport Discord's testing thread, in the format of the THUG
+test-build post. Attach `r36s/build/volkyport/nfshp2.zip` where it says
 `[LINK]`. Before posting:
 
 - Tick Knulli (RG34XX) and 720x480 only once the first-run install test on the
@@ -9,7 +9,7 @@ test-build post. Attach `r36s/build/portmaster/nfshp2.zip` where it says
 - The R36S figure is run 7 (2026-11-14, `docs/R36S_OPTIMISATION_BACKLOG.md`):
   median 27.3 fps, 23.7 to 32.2 from the 10th to the 90th percentile. Builds
   since then are not logged.
-- The first-run install through PortMaster's patcher has not run on a device
+- The first-run install through Volkyport's patcher has not run on a device
   yet. The post says so.
 
 The post is 1,707 characters, under the 2,000 of a chat message.
@@ -42,7 +42,7 @@ ROCKNIX
 
 ## Install
 
-1. Copy `nfshp2.zip` to PortMaster's `autoinstall` folder and open PortMaster.
+1. Copy `nfshp2.zip` to Volkyport's `autoinstall` folder and open Volkyport.
 2. Copy your `.iso` into `ports/nfshp2/gamedata`.
 3. Start **Need for Speed: Hot Pursuit 2** from Ports.
    The first launch installs the game from the `.iso`: about 10 minutes, 3 GB free, needs `python3`. If it stops, launch again. After that you can delete the `.iso`.
