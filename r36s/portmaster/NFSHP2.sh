@@ -2,14 +2,14 @@
 
 XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
 
-if [ -d "/opt/system/Tools/PortMaster/" ]; then
-  controlfolder="/opt/system/Tools/PortMaster"
-elif [ -d "/opt/tools/PortMaster/" ]; then
-  controlfolder="/opt/tools/PortMaster"
-elif [ -d "$XDG_DATA_HOME/PortMaster/" ]; then
-  controlfolder="$XDG_DATA_HOME/PortMaster"
+if [ -d "/opt/system/Tools/Volkyport/" ]; then
+  controlfolder="/opt/system/Tools/Volkyport"
+elif [ -d "/opt/tools/Volkyport/" ]; then
+  controlfolder="/opt/tools/Volkyport"
+elif [ -d "$XDG_DATA_HOME/Volkyport/" ]; then
+  controlfolder="$XDG_DATA_HOME/Volkyport"
 else
-  controlfolder="/roms/ports/PortMaster"
+  controlfolder="/roms/ports/Volkyport"
 fi
 
 source $controlfolder/control.txt
@@ -86,7 +86,7 @@ fi
 # "Player name".
 
 export LD_LIBRARY_PATH="/usr/lib32:$LD_LIBRARY_PATH"
-# The game's controls are by button position. PortMaster maps these pads by label, so each pad gets its own line here (R36S, RG34XX).
+# The game's controls are by button position. Volkyport maps these pads by label, so each pad gets its own line here (R36S, RG34XX).
 export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig
 190000004b4800000011000000010000,GO-Super Gamepad,a:b0,b:b1,x:b3,y:b2,back:b12,start:b13,leftstick:b14,rightstick:b15,guide:b16,dpleft:b10,dpdown:b9,dpright:b11,dpup:b8,leftshoulder:b4,lefttrigger:b6,rightshoulder:b5,righttrigger:b7,leftx:a0,lefty:a1,rightx:a2,righty:a3,platform:Linux,
 19000000010000000100000000010000,Deeplay-keys,a:b4,b:b3,x:b5,y:b6,back:b9,start:b10,guide:b11,leftstick:b12,rightstick:b15,leftshoulder:b7,rightshoulder:b8,lefttrigger:b13,righttrigger:b14,dpleft:h0.8,dpdown:h0.4,dpright:h0.2,dpup:h0.1,leftx:a0,lefty:a1,rightx:a2,righty:a3,platform:Linux,"
