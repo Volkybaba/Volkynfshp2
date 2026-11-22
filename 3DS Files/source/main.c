@@ -8817,7 +8817,7 @@ int main(int argc, char** argv)
     // R36S v43: version marker, in both logs (log.txt and
     // nfshp2_debug.txt), so a device log proves which binary ran.
     // R36S v50: marker bumped.
-    logPrintf("NFSHP2 v59\n");
+    logPrintf("NFSHP2 v63\n");
     logPrintf("Heap: asked=%luKB got=%luKB linear=%luKB\n",
               (unsigned long)(g_heapInfo.heapAsked / 1024),
               (unsigned long)(g_heapInfo.heapGot / 1024),

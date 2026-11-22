@@ -13,6 +13,7 @@
 #include "cammover.h"
 #include "democam.h"
 #include "flailer.h"
+#include "fred.h"
 #include "player.h"
 #include "playercam.h"
 #include "playerhud.h"
@@ -146,6 +147,16 @@ ReplayScreen *replayscreen_construct(void *mem, int32_t playerNumber)
     s->ReplayEndedTime = 0;
     screen_visibility(REPLAY_SCREEN_HASH, FLAILER_SCREEN_VISIBLE);
     s->PlayerNumber = playerNumber;
+	memcpy(TheRaceParameters.PlayerSettings[0].PlayerName,
+           Fred.FrontendPlayers[0].mPlayerSettings.PlayerName, 12);
+    memcpy(TheRaceParameters.PlayerSettings[1].PlayerName,
+           Fred.FrontendPlayers[1].mPlayerSettings.PlayerName, 12);
+    if (PlayerPlayersByIndex[0] != NULL)
+        memcpy(PlayerPlayersByIndex[0]->PlayerSettings.PlayerName,
+               Fred.FrontendPlayers[0].mPlayerSettings.PlayerName, 12);
+    if (PlayerPlayersByIndex[1] != NULL)
+        memcpy(PlayerPlayersByIndex[1]->PlayerSettings.PlayerName,
+               Fred.FrontendPlayers[1].mPlayerSettings.PlayerName, 12);
     s->NumLapMarkers = 0;
     s->NumHighlightMarkers = 0;
     s->HideTimeline = 0;

@@ -16,6 +16,7 @@
 #include "drivetarget.h"
 #include "eefpu.h"
 #include "flailer.h"
+#include "fred.h"
 #include "mainloop.h"
 #include "player.h"
 #include "playerhud.h"
@@ -639,7 +640,13 @@ static const char *driver_name(const DriverInfo *d)
         return "";
     return d->pCharacterInfo->CharacterName;
 }
-
+static const char *player_display_name(struct Player *p)
+{
+	int32_t n = p->PlayerNumber;
+	if (n >= 0 && n < 2)
+		return Fred.FrontendPlayers[n].mPlayerSettings.PlayerName;
+	return p->PlayerSettings.PlayerName;
+}
 // Whether the car is pulled over: its CarPullovers entry's bActive, read
 // by CarIndex as retail does, past the eight for a higher index.
 static int car_pulled_over(const struct Car *c)
@@ -669,7 +676,7 @@ static void live_split_status(struct Player *p, Race *race,
         if ((WorldTimeFrames / 500) & 1)
             s = hud_translate(car->pCarTypeInfo->pCarSpecs->ShortName);
         else if (c == rc)
-            s = p->PlayerSettings.PlayerName;
+            s = player_display_name(p);
         else
             s = driver_name(car->MyDriver);
         flailertext_set_string(TXT(st), s);
@@ -677,7 +684,7 @@ static void live_split_status(struct Player *p, Race *race,
         flailertext_set_language_id(
             TXT(st), (uint32_t)racingcar_get_finish_reason_id(c->FinishReason));
     } else if (c == rc) {
-        flailertext_set_string(TXT(st), p->PlayerSettings.PlayerName);
+        flailertext_set_string(TXT(st), player_display_name(p));
     } else if (car_pulled_over(car)) {
         flailertext_set_language_id(TXT(st), LANG_PULLED_OVER);
     } else {

@@ -12,6 +12,7 @@
 #include "drivecam.h"
 #include "flailer.h"
 #include "flailerwrap.h"
+#include "fred.h"
 #include "gameflow.h"
 #include "joyevent.h"
 #include "joystick.h"
@@ -131,9 +132,12 @@ static struct Player* player_on_port(uint32_t screen, int32_t port)
     else
         p = player_shown(0);
     if (p != NULL)
-        flailer_set_language_id(screen, OBJ_PLAYER_TITLE,
-                                p->PlayerNumber == 1 ? LANG_PLAYER_2
-                                                     : LANG_PLAYER_1);
+// The title over the page: the player's own name (config
+// PlayerName, via Fred), not the generic PLAYER 1 / PLAYER 2
+// label, so it shows volkytolky instead of Oyuncu 1.
+	    flailer_printf(screen, OBJ_PLAYER_TITLE, "%s",
+		               Fred.FrontendPlayers[p->PlayerNumber]
+                           .mPlayerSettings.PlayerName);
     return p;
 }
 
