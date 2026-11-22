@@ -17,7 +17,7 @@ python tools/make_card.py card
 
 Copy the `card/NFSHP2` folder into `ports/nfshp2/gamedata/`.
 
-Needs PortMaster on an armhf device (32-bit ARM with SDL2 and OpenGL ES). The game can't run in 64-bit. Tested on an R36S with dArkOS.
+Needs Volkyport on an armhf device (32-bit ARM with SDL2 and OpenGL ES). The game can't run in 64-bit. Tested on an R36S with dArkOS.
 
 Logs: `ports/nfshp2/log.txt`, and after a crash `ports/nfshp2/gamedata/nfshp2_stderr.txt` too.
 
@@ -68,4 +68,4 @@ sh r36s/build.sh
 sh r36s/package.sh
 ```
 
-The first command makes the build image: Debian 10 with the armhf toolchain and SDL 2.28.5. `build.sh` writes the binary to `r36s/build/armhf/nfshp2.armhf`, and `package.sh` makes the PortMaster package in `r36s/build/portmaster/`.
+The first command makes the build image: Debian 10 with the armhf toolchain and SDL 2.28.5. `build.sh` writes the binary to `r36s/build/armhf/nfshp2.armhf`, and `package.sh` makes the Volkyport package in `r36s/build/volkyport/`.
