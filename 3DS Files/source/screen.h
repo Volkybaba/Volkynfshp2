@@ -18,8 +18,8 @@
 // more to the sides), and the render target is the screen's own pixels
 // (r36s_video.c). NFSHP2_ASPECT=0 keeps 640x480 and bars. A frame without
 // the race's world (menus, movies, loading screens) is the 640x480 alone, and
-// the present fills the room around it with that frame's edge rows stretched
-// and dimmed (SCREEN_WORLD_FRAME below).
+// the present fills the room around it with its edges mirrored
+// (SCREEN_WORLD_FRAME below).
 
 #ifndef SCREEN_H
 #define SCREEN_H
@@ -36,15 +36,9 @@ float r36s_screen_full_h(void);
 #define SCREEN_OFF_X        ((SCREEN_FULL_W - SCREEN_TOP_W) * 0.5f)
 #define SCREEN_OFF_Y        ((SCREEN_FULL_H - SCREEN_TOP_H) * 0.5f)
 // The race's world is in this frame, so its picture fills the screen. Every
-// other frame is the 4:3 frame in the middle, the room around it that frame's
-// edge rows stretched and dimmed (r36s/compat/src/c3d_gles.c).
+// other frame is the 4:3 frame in the middle, the room around it its edges
+// mirrored (r36s/compat/src/c3d_gles.c).
 void r36s_screen_world(void);
-// The sun's sky count (trackview.c): fills `dst`, the w by h Z words of the rect
-// at x, y of a target targetW by targetH, from the last frame's occlusion
-// queries (0 where there is sky), and starts this frame's. Leaves dst alone
-// without queries.
-#include <stdint.h>
-void r36s_sun_probe(uint32_t* dst, int x, int y, int w, int h, int targetW, int targetH);
 #define SCREEN_WORLD_FRAME() r36s_screen_world()
 #else
 #define SCREEN_WORLD_FRAME() ((void)0)

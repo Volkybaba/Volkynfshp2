@@ -7,9 +7,9 @@
 // retail's last (980002), and langtab_get() answers them from here, so a
 // text object, a popup's button or a blurb takes one like any other ID.
 //
-// Each has the six languages retail ships, in retail's encoding (Latin-1:
-// the accents are the high bytes). FE_LONGEST gets the longest of the six
-// and FE_ID the ID's own number, as retail's tables do.
+// Each has the seven languages, in retail's encoding (Latin-1:
+// the accents are the high bytes). FE_LONGEST gets the longest of the
+// seven and FE_ID the ID's own number, as retail's tables do.
 //
 // Host-buildable: no <3ds.h> here.
 
@@ -50,23 +50,39 @@ enum {
     PORTLANG_CONTROLS_PRESS,                    // and its wait, $NAME's key
     PORTLANG_SAVE_CHANGES,                      // a screen's prompt on the
     PORTLANG_SAVE_CHANGES_RACE,                 // way out, and the debug race's
-    PORTLANG_GRAPHICS_FULL,                     // Display Options' Graphics
-    PORTLANG_GRAPHICS_FAST,                     // row (R36S), one text for
-    PORTLANG_GRAPHICS_FASTEST,                  // each preset, and its blurb
-    PORTLANG_GRAPHICS_BLURB,
-    PORTLANG_SMOKE_FULL,                        // Display Options' Smoke row
-    PORTLANG_SMOKE_LESS,                        // (R36S): three values, and
-    PORTLANG_SMOKE_LEAST,                       // its blurb
-    PORTLANG_SMOKE_BLURB,
-    PORTLANG_FACE_STANDARD,                     // Controller's Face buttons row
-    PORTLANG_FACE_SWAPPED,                      // (R36S): its two values, and
-    PORTLANG_FACE_BLURB,                        // its blurb
+    PORTLANG_EXIT_GAME,                         // the main menu's Exit Game
+                                                // confirmation title
+    PORTLANG_WIRELESS_BLURB,                    // the Options screen's
+                                                // Wireless row's blurb (R36S)
+    PORTLANG_WIRELESS_ROW_ON,                       // the Options screen's
+                                                // Wireless row: on (R36S)
+    PORTLANG_WIRELESS_ROW_OFF,                      // the Options screen's
+                                                // Wireless row: off (R36S)
+    PORTLANG_EXIT_CONFIRM,                      // the main menu's Exit Game
+                                                // popup question (R36S)
+    PORTLANG_EXIT_BLURB,                        // the main menu's Exit Game
+                                                // row's blurb (R36S)
+    PORTLANG_CHANGE,                            // the Controller page's
+    PORTLANG_BACK,                              // bottom row: change, back,
+    PORTLANG_DEFAULTS,                          // defaults (R36S)
+    PORTLANG_RACER_COP,                         // its table row: Racer/Cop
+    PORTLANG_CANCEL,                            // and its wait: Cancel
     PORTLANG_END
 };
 
 // The string for `id` in `languageEnum` (LangEnum), or NULL when the ID is
 // not the port's. *outLen is its length; it is NUL-terminated too.
 const char* portlang_get(int32_t languageEnum, int32_t id, size_t* outLen);
+
+// The same string for a kLanguages list index (main.c: Turkish first),
+// converting it to the LangEnum portlang_get wants: list 0 is Turkish
+// (LANG_TR), 1 English, 2 French, 3 German, 4 Italian, 5 Spanish,
+// 6 Swedish, 7 LONGEST, 8 ID; anything else (including -1, no language
+// chosen yet) falls back to English, as portlang_get does. Use this
+// wherever the caller holds gf->currLanguage, which is a list index,
+// not a LangEnum — passing it straight to portlang_get shows the NEXT
+// language (Turkish asks for column 0, English, and so on).
+const char* portlang_get_list(int listIndex, int32_t id, size_t* outLen);
 
 // The port's wording of one of retail's own IDs in `languageEnum`, or NULL
 // to keep retail's: the memory card's messages and the Load/Save screen's
