@@ -3,9 +3,11 @@
 #include "carloader.h"
 
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "cartypeinfo.h"
+#include "logwriter.h"
 #include "trackflow.h"
 
 CarLoader TheCarLoader;
@@ -227,6 +229,18 @@ int carloader_load(CarLoader *cl, const RideInfo *ri)
     LoadedCar *car;
     LoadedSkin *skin;
 
+    // R36S v43 DIAG: the load's entry, drained. If the fault is in
+    // want_car / the skin entry (slot pool, car type info), this line
+    // is the last one on the card.
+    {
+        char buf[128];
+        int n = snprintf(buf, sizeof buf,
+                         "DIAG load: carloader_load %s\n",
+                         ct->CompressedGeometryFilename);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+        logwriter_drain();
+    }
     car = want_car(cl, ct->CompressedGeometryFilename);
     if (ri->HasDash)
         want_car(cl, ct->CompressedDashGeometryFilename);
@@ -381,6 +395,17 @@ void carloader_begin_loading(CarLoader *cl, void (*callback)(void))
     }
     if (any) {
         cl->LoadingInProgress = 1;
+        // R36S v43 DIAG: skin textures start, drained. If the fault
+        // is in the texture load (hashes, pack lookup, queued read),
+        // this is the last line; the matching "stage done" never comes.
+        {
+            char buf[128];
+            int m = snprintf(buf, sizeof buf,
+                             "DIAG load: begin skins n=%d\n", n);
+            if (m > 0)
+                logwriter_put(buf, (size_t)m);
+            logwriter_drain();
+        }
         if (gLoadTexturesFromFileFn != NULL)
             gLoadTexturesFromFileFn(pCarTexturePack, tex, n,
                                     carloader_loading_done_callback_bridge,
@@ -396,6 +421,16 @@ void carloader_begin_loading(CarLoader *cl, void (*callback)(void))
         if (!c->Loading && !c->Loaded) {
             cl->LoadingInProgress = 1;
             c->Loading = 1;
+            // R36S v43 DIAG: geometry starts (skins are done), drained.
+            {
+                char buf[128];
+                int m = snprintf(buf, sizeof buf,
+                                 "DIAG load: begin geometry %s\n",
+                                 c->GeometryFilename);
+                if (m > 0)
+                    logwriter_put(buf, (size_t)m);
+                logwriter_drain();
+            }
             c->pResourceFile = gCarLoadResourceFileFn == NULL ? NULL
                 : gCarLoadResourceFileFn(c->GeometryFilename,
                                          CARLOADER_RESOURCE_TYPE,
@@ -411,6 +446,12 @@ void carloader_loading_done_callback(CarLoader *cl)
 {
     bNode *n;
 
+    // R36S v43 DIAG: a load stage finished (skins or geometry), drained.
+    // If the crash is after this line but before the next "begin", it is
+    // in the callback's own tail (remove_unused / begin_loading again).
+    logwriter_put("DIAG load: stage done\n",
+                  sizeof("DIAG load: stage done\n") - 1);
+    logwriter_drain();
     // Whatever was loading is what the load brought in.
     for (n = cl->LoadedSkinList.next; n != &cl->LoadedSkinList; n = n->next) {
         LoadedSkin *s = (LoadedSkin *)(void *)n;

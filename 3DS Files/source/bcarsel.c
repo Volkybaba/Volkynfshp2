@@ -19,6 +19,7 @@
 #include "flailer.h"
 #include "fredrace.h"
 #include "joyevent.h"
+#include "logwriter.h"
 #include "realtime.h"
 #include "scenerycull.h"
 #include "texturepack.h"
@@ -778,10 +779,24 @@ static void showLoadedCar(CarSelector* c)
 {
     RideInfo ri;
 
+    // R36S v43 DIAG: bracket the show, drained, so a fault inside
+    // fecar_reinit / carrenderinfo_construct leaves its entry line.
+    {
+        char buf[128];
+        int n = snprintf(buf, sizeof buf,
+                         "DIAG load: showLoadedCar %s\n",
+                         cti(c->loaded->type)->CarTypeName);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+        logwriter_drain();
+    }
     ride_info_init(&ri, c->loaded->type,
                    skinAt(c->loaded->status, c->loaded->skinIndex), 0, 0);
     fecar_reinit(&c->car, &ri);
     fecar_reinit(&c->reflection, &ri);
+    logwriter_put("DIAG load: showLoadedCar done\n",
+                  sizeof("DIAG load: showLoadedCar done\n") - 1);
+    logwriter_drain();
 }
 
 // UpdateRenderingCarParameters (0x00197ce0): a car on the turntable. The
@@ -1416,11 +1431,48 @@ static void selTick(CarSelector* c)
     if (c->loaded && c->loaded != cur(c) && c->fade == c->fadeMax
         && c->thumbs.state == 0) {
         c->pending = cur(c);
+        // R36S v43 DIAG: bracket the swap. drain() is synchronous (it
+        // waits until the writer has fwrite+fflush'd the line), where
+        // flush_soon() only signals the writer thread and can lose the
+        // last line if the fault follows within microseconds.
+        {
+            char buf[128];
+            int n = snprintf(buf, sizeof buf,
+                             "DIAG load: carsel swap to %s\n",
+                             cti(c->pending->type)->CarTypeName);
+            if (n > 0)
+                logwriter_put(buf, (size_t)n);
+            logwriter_drain();
+        }
         loaderUnload(h, c->loaded->type);
         c->loaded = NULL;
+        // R36S v47 FIX: the old car's render info points into its
+        // geometry, which loaderUnload just freed. Until the new car
+        // loads and showLoadedCar re-inits it, the display frame would
+        // draw the car from that stale info (render_front_end_cars ->
+        // emodel_get_bounding_box / carrenderinfo_render on freed
+        // solids). Drop it so the render skips the car while it is
+        // pending. The fade is at max, so nothing shows.
+        fecar_reinit(&c->car, NULL);
+        fecar_reinit(&c->reflection, NULL);
         loaderLoad(h, c->pending->type);
         loaderBeginLoading(h);
         trace(h, "carsel load %s", cti(c->pending->type)->CarTypeName);
+        logwriter_drain();
+        // R36S v47 DIAG: the pending car's lock state decides the
+        // render path — a covered car renders the cover (safe), any
+        // other renders from the (now dropped) render info. Drained.
+        {
+            char buf[128];
+            int n = snprintf(buf, sizeof buf,
+                             "DIAG carsel: swap car=%s nStatus=%d covered=%d\n",
+                             cti(c->pending->type)->CarTypeName,
+                             c->pending->status->nStatus,
+                             covered(c, c->pending));
+            if (n > 0)
+                logwriter_put(buf, (size_t)n);
+            logwriter_drain();
+        }
     }
     if (c->loaded == cur(c)) {
         if (c->fade == c->fadeMax) showLoadedCar(c);

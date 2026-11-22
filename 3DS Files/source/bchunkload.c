@@ -3,6 +3,9 @@
 #include "bchunkload.h"
 
 #include <stddef.h>
+#include <stdio.h>
+
+#include "logwriter.h"
 
 #include "acidsys.h"
 #include "bchunk.h"
@@ -49,6 +52,25 @@ static void bbreak(void)
 static uint8_t *next_chunk(uint8_t *c)
 {
     return c + 8 + bchunk_u32(c + 4);
+}
+
+// The next chunk after c, or end if the next chunk starts exactly at
+// end (the walk is done), or NULL if the chunk's size is corrupt: it
+// runs past the buffer or wraps around. A truncated or corrupt file --
+// an SD card the user can edit -- ends the walk instead of walking off
+// the buffer. R36S v42: the Cobra load faulted in this walk; a chunk
+// size that overshoots the buffer used to make `while (c != end)` run
+// past it forever.
+static uint8_t *next_chunk_checked(uint8_t *c, uint8_t *end)
+{
+    uint8_t *n;
+
+    if (c + 8 > end)
+        return NULL;
+    n = next_chunk(c);
+    if (n <= c || n > end)
+        return NULL;
+    return n;
 }
 
 int loader_null(uint8_t *chunk)
@@ -262,10 +284,14 @@ void traverse_chunks(uint8_t *first, uint8_t *end, BChunkLoader *table,
     int slot = 0;
     int misses = 0;
 
-    while (c != end) {
+    while (c + 8 <= end) {
         if (table[slot](c)) {
             // The next chunk starts at the slot that took this one.
-            c = next_chunk(c);
+            // A corrupt size ends the walk (next_chunk_checked NULL).
+            uint8_t *n = next_chunk_checked(c, end);
+            if (n == NULL)
+                break;
+            c = n;
             misses = 0;
         } else {
             slot++;
@@ -275,8 +301,13 @@ void traverse_chunks(uint8_t *first, uint8_t *end, BChunkLoader *table,
             // Nobody took it. The count is not reset, so from here each
             // chunk has one try until one is taken.
             if (misses > num) {
+                uint8_t *n;
+
                 bbreak();
-                c = next_chunk(c);
+                n = next_chunk_checked(c, end);
+                if (n == NULL)
+                    break;
+                c = n;
             }
         }
     }
@@ -285,23 +316,52 @@ void traverse_chunks(uint8_t *first, uint8_t *end, BChunkLoader *table,
 void traverse_chunks_backwards(uint8_t *first, uint8_t *end,
                                BChunkLoader *table, int num)
 {
-    while (first != end) {
+    while (first + 8 <= end) {
         uint8_t *c = first;
-        uint8_t *n = next_chunk(c);
+        uint8_t *n;
         int slot;
 
         // The last chunk before `end`, found from the start each time.
-        while (n != end) {
+        // Each chunk's size must stay inside the buffer: a corrupt
+        // size ends the walk at that chunk instead of running past
+        // the buffer. That chunk's loader ran during the forward
+        // load, so unload it too, then stop. R36S v42.
+        for (;;) {
+            n = next_chunk_checked(c, end);
+            if (n == NULL || n >= end)
+                break;
             c = n;
-            n = next_chunk(c);
         }
         end = c;
+        /* R36S v13 DIAG: which chunk the backwards unload is about to
+           try — the crash in delete_file is inside one of the
+           UnloaderTable calls, and the last chunk type logged is the
+           one that never returned. */
+        {
+            char buf[64];
+            int n = snprintf(buf, sizeof buf, "DIAG unload: chunk 0x%08x\n",
+                             (unsigned)bchunk_u32(c));
+            if (n > 0)
+                logwriter_put(buf, (size_t)n);
+        }
         for (slot = 0; slot < num; slot++) {
             if (table[slot](c))
                 break;
         }
         if (slot == num)
             bbreak();
+        /* R36S v17 DIAG: the unloader returned — if the next log line
+           is missing, the crash is inside the unloader above; if this
+           line is the last one, the crash is after traverse returns
+           (delete_file: bFree / post_load_fixup). */
+        {
+            char buf[64];
+            int n = snprintf(buf, sizeof buf,
+                             "DIAG unload: chunk done 0x%08x\n",
+                             (unsigned)bchunk_u32(c));
+            if (n > 0)
+                logwriter_put(buf, (size_t)n);
+        }
     }
 }
 
@@ -322,13 +382,43 @@ void unload_chunks(uint8_t *chunks, int32_t size)
 
 void post_load_fixup(void)
 {
+    /* R36S v18 DIAG: brackets efix_up_tables + the three optional fns.
+       R36S v19 DIAG: before/after each optional fn — v18 log proved the
+       crash is in one of them (el_update_textures or afx_update_textures;
+       flailer is never assigned, always NULL).
+       R36S v43 DIAG: drain after the enter and done lines, so a fault
+       inside the fixup leaves the enter line on the card. (The afx
+       node lines inside are not drained — there are a hundred of them.) */
+    logwriter_put("DIAG unload: post_fixup enter\n",
+                  sizeof("DIAG unload: post_fixup enter\n") - 1);
+    logwriter_drain();
     efix_up_tables();
-    if (gELightUpdateTexturesFn != NULL)
+    logwriter_put("DIAG unload: post_fixup after efix\n",
+                  sizeof("DIAG unload: post_fixup after efix\n") - 1);
+    if (gELightUpdateTexturesFn != NULL) {
+        logwriter_put("DIAG unload: post_fixup before elight\n",
+                      sizeof("DIAG unload: post_fixup before elight\n") - 1);
         gELightUpdateTexturesFn();
-    if (gAfxUpdateTexturesFn != NULL)
+        logwriter_put("DIAG unload: post_fixup after elight\n",
+                      sizeof("DIAG unload: post_fixup after elight\n") - 1);
+    }
+    if (gAfxUpdateTexturesFn != NULL) {
+        logwriter_put("DIAG unload: post_fixup before afx\n",
+                      sizeof("DIAG unload: post_fixup before afx\n") - 1);
         gAfxUpdateTexturesFn();
-    if (gFlailerPostLoadFixupFn != NULL)
+        logwriter_put("DIAG unload: post_fixup after afx\n",
+                      sizeof("DIAG unload: post_fixup after afx\n") - 1);
+    }
+    if (gFlailerPostLoadFixupFn != NULL) {
+        logwriter_put("DIAG unload: post_fixup before flailer\n",
+                      sizeof("DIAG unload: post_fixup before flailer\n") - 1);
         gFlailerPostLoadFixupFn();
+        logwriter_put("DIAG unload: post_fixup after flailer\n",
+                      sizeof("DIAG unload: post_fixup after flailer\n") - 1);
+    }
+    logwriter_put("DIAG unload: post_fixup done\n",
+                  sizeof("DIAG unload: post_fixup done\n") - 1);
+    logwriter_drain();
 }
 
 void hot_chunks_post_load_fixup(void)

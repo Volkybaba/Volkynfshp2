@@ -4,6 +4,16 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "portlang.h"
+
+// The Options screen's Wireless row (R36S): the port's own config flag
+// (configitems.h), its save-back (configitems.c) and the FRONTB patch's
+// live row text (debugmenu.h). Declared here, not included, so the host
+// check's build of this file stays as it was.
+extern int32_t ConfigWirelessOff;
+int  config_save_wireless_off(void);
+void debugmenu_options_wireless_set(int off);
+
 // The three screens NewMainMenu leads to. See bscreens.h for the shape and
 // docs/formats/frontend-screens.md for the decompilation.
 
@@ -509,7 +519,7 @@ typedef struct {
     bool        displayStart;// MENUITEM_3 also kicks the display manager
 } BOptionItem;
 
-static const BOptionItem kOptionItems[7] = {
+static const BOptionItem kOptionItems[8] = {
     { 100020, "Audio Options",      false, false },  // 1 Audio
     { 100021, "Joystick PreConfig", false, false },  // 2 Controller
     { 100022, "Display Options",    false, true  },  // 3 Display
@@ -517,7 +527,132 @@ static const BOptionItem kOptionItems[7] = {
     { 100024, "NameEntry",          false, false },  // 5 Player Names
     { 100025, "Credits",            true,  false },  // 6 Credits
     { 100026, "Language Options",   true,  false },  // 7 Languages
+    // 8 Wireless (R36S): no screen, a toggle -- the port's own row, added
+    // to FRONTB by debugmenu_patch.c. Its blurb is the port's, its label
+    // "Kablosuz: Acik/Kapali" in the patched chunk.
+    { PORTLANG_WIRELESS_BLURB, "",  false, false },
 };
+
+// ------------------------------------------------- Options scroll (v29)
+//
+// The Options screen has 8 rows but shows 7: the 8th (Wireless) is revealed
+// by scrolling down, the 1st by scrolling back up. The BUN authors all 8
+// rows at fixed Y; the window shifts them by one row-step and hides the row
+// outside it. The state is file-static because there is one Options
+// instance (s->options); the other Options pages (Audio, Controller, ...) run
+// their own instances and never touch it.
+//
+// The up/down arrows are the Sound menu's scroll-arrow bitmaps, copied into
+// this screen by debugmenu_patch.c (v28) under the same hashes. Their
+// visibility is driven here: up when rows sit above the window, down when
+// rows sit below it. The Sound menu's own arrows are untouched.
+//
+// Y writes go through the animation kit's hooks (getTopLeft / setTopLeft /
+// setVisible), the same window the slide-in uses, so no new header is needed.
+
+// The Sound menu's scroll arrows, copied into the Options screen (v28).
+#define OPT_UP_ARROW   0xedf2e4eeu
+#define OPT_DOWN_ARROW 0x20d73d01u
+
+static int   sOptTop    = 0;      // window top row (0: rows 1-7, 1: rows 2-8)
+static float sOptStep   = 0.0f;   // row Y step, from the BUN span
+static float sOptItemY[8];        // home top-left Y of MENUITEM(n)
+static float sOptMaskY[8];        // home top-left Y of MI_n_MASK
+static bool  sOptInit   = false;  // home Y captured (once, first entry)
+
+static float optGetY(BScreens* s, uint32_t screen, uint32_t object)
+{
+    float  x = 0.0f, y = 0.0f;
+    BAnim* a = clock(s);
+    if (a->hooks.getTopLeft)
+        a->hooks.getTopLeft(a->hooks.user, screen, object, &x, &y);
+    return y;
+}
+
+static void optSetY(BScreens* s, uint32_t screen, uint32_t object, float y)
+{
+    float  x = 0.0f, dummy = 0.0f;
+    BAnim* a = clock(s);
+    if (a->hooks.getTopLeft)
+        a->hooks.getTopLeft(a->hooks.user, screen, object, &x, &dummy);
+    if (a->hooks.setTopLeft)
+        a->hooks.setTopLeft(a->hooks.user, screen, object, x, y);
+}
+
+static void optSetVisible(BScreens* s, uint32_t screen, uint32_t object,
+                          int visible)
+{
+    BAnim* a = clock(s);
+    if (a->hooks.setVisible)
+        a->hooks.setVisible(a->hooks.user, screen, object, visible);
+}
+
+// Put the 7-row window at sOptTop: every row shifts by -top*step, the row
+// outside the window hides (label and mask), and the arrows show which way
+// there is more. `cur` is the highlighted row; its mask stays off for the
+// highlight, as SelectionSet leaves it. Runs after setCurrentItem, so it
+// also repairs the mask SelectionSet re-shows when the highlight wraps off
+// a row that just left the window.
+static void optScrollApply(BScreens* s, BScreenInstance* inst, int cur)
+{
+    uint32_t screen = inst->screen;
+    int      n;
+
+    if (!sOptInit || sOptStep <= 0.0f) return;
+    for (n = 1; n <= 8; n++) {
+        float y = sOptItemY[n - 1] - (float)sOptTop * sOptStep;
+        int   inWindow = (n > sOptTop && n <= sOptTop + 7);
+        // NTSC hides Languages (row 7) outright; the window never shows it.
+        if (n == 7 && s->videoMode == 1) inWindow = 0;
+        optSetY(s, screen, BSCR_ITEM_MENUITEM(n), y);
+        optSetY(s, screen, BSCR_MI_MASK(n),
+                sOptMaskY[n - 1] - (float)sOptTop * sOptStep);
+        optSetVisible(s, screen, BSCR_ITEM_MENUITEM(n), inWindow ? 1 : 0);
+        optSetVisible(s, screen, BSCR_MI_MASK(n),
+                      (inWindow && n != cur) ? 1 : 0);
+    }
+    optSetVisible(s, screen, OPT_UP_ARROW, sOptTop > 0 ? 1 : 0);
+    optSetVisible(s, screen, OPT_DOWN_ARROW, sOptTop + 7 < 8 ? 1 : 0);
+}
+
+// Capture the rows' home Y and the step, once, from the unmodified BUN;
+// then put the window at the top (rows 1-7). The Y writes go into the
+// patched FRONTB buffer, so the destructor puts them back.
+static void optScrollInit(BScreens* s, BScreenInstance* inst)
+{
+    int n;
+
+    if (!sOptInit) {
+        for (n = 1; n <= 8; n++) {
+            sOptItemY[n - 1] = optGetY(s, inst->screen, BSCR_ITEM_MENUITEM(n));
+            sOptMaskY[n - 1] = optGetY(s, inst->screen, BSCR_MI_MASK(n));
+        }
+        sOptStep = (sOptItemY[7] - sOptItemY[0]) / 7.0f;
+        if (sOptStep <= 0.0f)
+            sOptStep = (sOptMaskY[7] - sOptMaskY[0]) / 7.0f;
+        sOptInit = true;
+        trace(s, "options scroll step %.1f", (double)sOptStep);
+    }
+    sOptTop = 0;
+    optScrollApply(s, inst, 0);
+}
+
+// Put every row back at home Y and visible, arrows off, so the next entry
+// starts clean.
+static void optScrollRestore(BScreens* s, BScreenInstance* inst)
+{
+    int n;
+
+    if (!sOptInit) return;
+    for (n = 1; n <= 8; n++) {
+        optSetY(s, inst->screen, BSCR_ITEM_MENUITEM(n), sOptItemY[n - 1]);
+        optSetY(s, inst->screen, BSCR_MI_MASK(n), sOptMaskY[n - 1]);
+        optSetVisible(s, inst->screen, BSCR_ITEM_MENUITEM(n), 1);
+        optSetVisible(s, inst->screen, BSCR_MI_MASK(n), 1);
+    }
+    optSetVisible(s, inst->screen, OPT_UP_ARROW, 0);
+    optSetVisible(s, inst->screen, OPT_DOWN_ARROW, 0);
+}
 
 // OptionsScreenBase (0x001e53d0).
 static void optbaseConstruct(BScreens* s, BScreenInstance* inst,
@@ -553,11 +688,19 @@ static void optionsConstruct(BScreens* s, BScreenInstance* inst,
         HOOK(s, grayMenuItem, screen, BSCR_ITEM_MENUITEM(7), BSCR_GRAY_HIDE);
         trace(s, "gray MENUITEM_7 hide (NTSC)");
     }
+    // The eighth row's label shows the Wireless toggle's state; the patch
+    // put a default there, this corrects it on every entry.
+    debugmenu_options_wireless_set(ConfigWirelessOff);
+    // Scroll window at the top: 7 rows show, the 8th waits below.
+    optScrollInit(s, inst);
 }
 
 static void optionsDestruct(BScreens* s, BScreenInstance* inst)
 {
     trace(s, "Options dtor");
+    // Rows back at home before the kit releases, so the next entry starts
+    // from the BUN positions.
+    optScrollRestore(s, inst);
     kitDestruct(s, inst);
     memset(inst, 0, sizeof(*inst));
 }
@@ -571,18 +714,33 @@ static void optionsHandleHighlight(BScreens* s, BScreenInstance* inst,
 {
     uint32_t mask = overrideMask;
     BAnim*   a    = clock(s);
+    int      n    = itemIndex(data ? data->itemHash : 0, 8);
+
+    // Scroll, main Options screen only (the other Options pages run their
+    // own instances and their own lists). Row 8 needs the window up one
+    // step, row 1 needs it back down; the Y shift goes in before the
+    // brackets are placed, so they land on the shifted row.
+    if (inst == &s->options && n) {
+        int newTop = (n == 8) ? 1 : (n == 1) ? 0 : sOptTop;
+        if (newTop != sOptTop) {
+            sOptTop = newTop;
+            optScrollApply(s, inst, n);
+        }
+    }
 
     // Both highlight animations, on the raw hash, before anything else.
     banim_highlight_set_item(a, &inst->bloom, data ? data->itemHash : 0);
     banim_highlight_set_item(a, &inst->bloom2, data ? data->itemHash : 0);
 
     if (!mask) {
-        int n = itemIndex(data ? data->itemHash : 0, 7);
         // Out of range leaves the mask at 0, and the rest of the function
         // runs anyway: SetCurrentItem(0) and a bounding box for nothing.
         mask = n ? BSCR_MI_MASK(n) : 0u;
     }
     setCurrentItem(s, inst, mask, BSCR_UNDER_OPTIONS, BSCR_OVER_OPTIONS);
+    // Enforce the window after SelectionSet: it re-shows the mask of the
+    // row the highlight just left, even when that row just left the window.
+    if (inst == &s->options && n) optScrollApply(s, inst, n);
 }
 
 // Returns true if the screen was torn down.
@@ -591,7 +749,21 @@ static bool optionsOnSelect(BScreens* s, BScreenInstance* inst,
 {
     const char* dest      = "";      // the out-of-range default, an empty
     bool        immediate = false;   // literal, which resolves to no screen
-    int         n         = itemIndex(data ? data->itemHash : 0, 7);
+    int         n         = itemIndex(data ? data->itemHash : 0, 8);
+
+    // The eighth row is no screen: the Wireless toggle. Flip the flag,
+    // show it on the row, and write it back to the config file so it
+    // holds across boots. No screen change: the stay is the answer.
+    if (n == 8) {
+        int saved;
+
+        ConfigWirelessOff = !ConfigWirelessOff;
+        debugmenu_options_wireless_set(ConfigWirelessOff);
+        saved = config_save_wireless_off();
+        trace(s, "select MENUITEM_8 wireless %s (saved %d)",
+              ConfigWirelessOff ? "off" : "on", saved);
+        return false;
+    }
 
     if (n) {
         const BOptionItem* item = &kOptionItems[n - 1];
@@ -621,7 +793,7 @@ static bool optionsHandleEvent(BScreens* s, BScreenInstance* inst,
                                BScreenMessage msg, BScreenCallbackData* data)
 {
     if (msg == BMSG_MENUITEM_HIGHLIGHT) {
-        int n = itemIndex(data ? data->itemHash : 0, 7);
+        int n = itemIndex(data ? data->itemHash : 0, 8);
         if (n) setBlurb(s, inst, kOptionItems[n - 1].blurb);
         // then tAnimatedBlurb::Animate and Rumbleator::Tick
         return false;

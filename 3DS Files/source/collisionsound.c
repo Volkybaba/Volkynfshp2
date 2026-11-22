@@ -449,12 +449,12 @@ CollisionSample *collision_sound_create_sample(Collision *c)
 
 // A sample still playing goes on the free list to finish, and one that
 // has stopped is deleted. A scrape still playing fades out over 50 ms on
-// the free list; one that has stopped can be destroyed immediately.
+// the free list; one that has stopped is left, its slot not given back
+// until UnRegister deletes the pool.
 void collision_sound_release_sample(Collision *c)
 {
     CollisionSample *s = c->Sample;
 
-    c->Sample = NULL;
     if (s != NULL) {
         if (bsample_is_playing(&s->Sample))
             push_free(s);
@@ -462,20 +462,10 @@ void collision_sound_release_sample(Collision *c)
             delete_sample(s);
     }
     s = c->Scrape;
-    c->Scrape = NULL;
-    if (s == NULL)
-        return;
-#ifdef NFSHP2_R36S
-    if (!bsample_is_playing(&s->Sample)) {
-        delete_sample(s);
-        return;
+    if (s != NULL && bsample_is_playing(&s->Sample)) {
+        bsample_fade(&s->Sample, 0.0f, 50);
+        push_free(s);
     }
-#else
-    if (!bsample_is_playing(&s->Sample))
-        return;
-#endif
-    bsample_fade(&s->Sample, 0.0f, 50);
-    push_free(s);
 }
 
 void collision_sound_play_foilage(const bVector3 *pos)

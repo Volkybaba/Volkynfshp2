@@ -1,6 +1,7 @@
 // cardamage -- see cardamage.h.
 
 #include "cardamage.h"
+#include "logwriter.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -98,8 +99,21 @@ int unloader_body_damage(uint8_t *chunk)
     if (bchunk_u32(chunk) != BODY_DAMAGE_ID)
         return 0;
     info = (BodyDamageInfo *)(void *)(chunk + 8);
-    info->Node.prev->next = info->Node.next;
-    info->Node.next->prev = info->Node.prev;
+    /* R36S v15: unlink only while the node is still in its list.
+       Same stale-pointer segfault as the solid list (v12): a node
+       already unlinked (its file, or a file sharing it, unloaded
+       first) writes through stale prev/next. */
+    if (info->Node.prev == NULL || info->Node.next == NULL) {
+        logwriter_put("DIAG unload: bodydamage null node, skipped\n",
+                      sizeof("DIAG unload: bodydamage null node, skipped\n") - 1);
+    } else if (info->Node.prev->next == &info->Node
+        && info->Node.next->prev == &info->Node) {
+        info->Node.prev->next = info->Node.next;
+        info->Node.next->prev = info->Node.prev;
+    } else {
+        logwriter_put("DIAG unload: bodydamage already unlinked, skipped\n",
+                      sizeof("DIAG unload: bodydamage already unlinked, skipped\n") - 1);
+    }
     return 1;
 }
 

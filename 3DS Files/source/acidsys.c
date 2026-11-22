@@ -1,8 +1,10 @@
 // acidsys -- AcidFXE.obj's effect system, its data half. See acidsys.h.
 
 #include "acidsys.h"
+#include "logwriter.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "acidfx.h"
@@ -58,8 +60,21 @@ static void unlink_node(bNode *n)
     bNode *next = n->next;
     bNode *prev = n->prev;
 
-    prev->next = next;
-    next->prev = prev;
+    /* R36S v15: unlink only while the node is still in its list.
+       Same stale-pointer segfault as the solid list (v12): a node
+       already unlinked (its file, or a file sharing it, unloaded
+       first) writes through stale prev/next. */
+    if (n->prev == NULL || n->next == NULL) {
+        logwriter_put("DIAG unload: acid null node, skipped\n",
+                      sizeof("DIAG unload: acid null node, skipped\n") - 1);
+    } else if (n->prev->next == n
+        && n->next->prev == n) {
+        prev->next = next;
+        next->prev = prev;
+    } else {
+        logwriter_put("DIAG unload: acid already unlinked, skipped\n",
+                      sizeof("DIAG unload: acid already unlinked, skipped\n") - 1);
+    }
 }
 
 // The xorshift AddAutoEmitter steps both seeds with, inline there.
@@ -226,19 +241,45 @@ void afx_track_unloader(void)
 void afx_update_textures(void)
 {
     bNode *n;
+    int count = 0;
 
+    /* R36S v20: never trust the cached d->Texture. afx_update_textures
+       caches GetTextureInfo results into in-chunk AcidEmitterData nodes,
+       but the TextureInfo it points at lives in a texture pack's in-chunk
+       pTextureInfo array: when that pack's file unloads, the array is
+       freed (bFree of the chunk buffer; large buffers are munmap'd) and
+       every surviving node's d->Texture dangles. The next afx run then
+       reads t->NameHash through freed/unmapped memory and segfaults.
+       That is the v19 frontend-reload crash: "post_fixup before afx" is
+       the last line, elight (which overwrites its 3 flare textures
+       unconditionally, never reading a cached pointer) completes fine
+       just before it. Surviving nodes can only come from FRONTA.BUN,
+       the one file never unloaded (0 resUnload FRONTEND in the v19 log);
+       the track's DATAS nodes were removed cleanly at unload. Fix: always
+       re-resolve, like el_update_textures does — afx runs only at load
+       boundaries (post_load_fixup), never per frame, so the lookup cost
+       is negligible. The per-node DIAG proves which node/hash it is on. */
+    logwriter_put("DIAG unload: afx enter\n",
+                  sizeof("DIAG unload: afx enter\n") - 1);
     for (n = EmitterDataList.next; n != &EmitterDataList; n = n->next) {
         AcidEmitterData *d = (AcidEmitterData *)n;
-#ifdef NFSHP2_R36S
-        // ResourceFile can free the old texture pack before post-load fixup.
-        // Resolve the hash against the surviving packs without touching it.
-        d->Texture = GetTextureInfo(d->TextureNameHash, 0, 0);
-#else
-        TextureInfo *t = (TextureInfo *)d->Texture;
+        char buf[80];
+        int m;
 
-        if (t == NULL || t->NameHash != d->TextureNameHash)
-            d->Texture = GetTextureInfo(d->TextureNameHash, 0, 0);
-#endif
+        count++;
+        m = snprintf(buf, sizeof buf,
+                     "DIAG unload: afx node %p hash 0x%08x\n",
+                     (void *)d, (unsigned)d->TextureNameHash);
+        if (m > 0)
+            logwriter_put(buf, (size_t)m);
+        d->Texture = GetTextureInfo(d->TextureNameHash, 0, 0);
+    }
+    {
+        char buf[64];
+        int m = snprintf(buf, sizeof buf,
+                         "DIAG unload: afx done, %d nodes\n", count);
+        if (m > 0)
+            logwriter_put(buf, (size_t)m);
     }
 }
 
@@ -890,23 +931,6 @@ static void acid_corner(uint32_t *x, uint32_t *y, float c, float sn,
     *y = (uint32_t)ee_trunc_w(py * 7.0f + fy);
 }
 
-#ifdef NFSHP2_R36S
-int      gAcidThin = 1;
-uint32_t gAcidSprites;
-uint32_t gAcidDrawn;
-float    gAcidAreaAllK;
-float    gAcidAreaDrawnK;
-float    gAcidBucketK[5];
-uint32_t gAcidBucketN[5];
-int      gAcidBigThin = 1;
-uint32_t gAcidBigSeen;
-
-// A sprite is big when its half-size, in the GS's pixels, is this or more:
-// 20 across, where smoke and dust start to cover ground. Sparks and the
-// small stuff cost no fill and stay as they are.
-#define ACID_THIN_MIN_SIZE 10.0f
-#endif
-
 void acid_system_render_effects(AcidEffectSystem *s, struct eView *view)
 {
     uint32_t start = bGetTicker();
@@ -1004,9 +1028,6 @@ void acid_system_render_effects(AcidEffectSystem *s, struct eView *view)
             uint32_t a, z, rgba, x[4], y[4], w[20];
             int32_t sx, sy;
             int i;
-#ifdef NFSHP2_R36S
-            int thin = 1;
-#endif
 
             pnext = pn->next;
             pos.x = pa->X;
@@ -1026,36 +1047,6 @@ void acid_system_render_effects(AcidEffectSystem *s, struct eView *view)
                 size = max_size;
             if (!(1.0f < size) || !(vv.z < far_clip))
                 continue;
-#ifdef NFSHP2_R36S
-            gAcidSprites++;
-            gAcidAreaAllK += size * size * 3.5f * 0.001f;
-            {
-                int b = size < 10.0f ? 0 : size < 40.0f ? 1 : size < 100.0f ? 2 : size < 250.0f ? 3 : 4;
-
-                gAcidBucketK[b] += size * size * 3.5f * 0.001f;
-                gAcidBucketN[b]++;
-            }
-            if (view->ID == 1 && size >= ACID_BIG_SIZE) {
-                gAcidBigSeen++;
-            }
-            thin = size < ACID_THIN_MIN_SIZE ? 1 : gAcidThin;
-            if (view->ID == 1 && size >= ACID_BIG_SIZE && gAcidBigThin > thin) {
-                thin = gAcidBigThin;
-            }
-            if (thin > 1) {
-                uint32_t hash = (uint32_t)((uintptr_t)pn >> 5) * 2654435761u;
-
-                // gAcidBigThin is a power of two, and keeps the sprites
-                // whose low bits are 0: those it keeps at 8 it keeps at 4
-                // too, so a cloud that grows or thins loses sprites or
-                // gets them back, but never swaps one for another.
-                if (thin == gAcidBigThin ? ((hash >> 20) & (uint32_t)(thin - 1)) != 0
-                                         : (hash >> 20) % (uint32_t)thin != 0)
-                    continue;
-            }
-            gAcidDrawn++;
-            gAcidAreaDrawnK += size * size * 3.5f * 0.001f;
-#endif
 
             a = (uint16_t)pa->Angle;
             if (a & 1)
@@ -1096,10 +1087,6 @@ void acid_system_render_effects(AcidEffectSystem *s, struct eView *view)
             count++;
 
             hermite_parameter(&col, &cb, t);
-#ifdef NFSHP2_R36S
-            if (thin > 1 && 0.0f < col.w && col.w < 128.0f)
-                col.w = 128.0f * (1.0f - powf(1.0f - col.w * (1.0f / 128.0f), (float)thin));
-#endif
             rgba = acid_byte(col.x) | acid_byte(col.y) << 8
                  | acid_byte(col.z) << 16 | acid_byte(col.w) << 24;
             u0 = (float)(int32_t)(pa->Frame & col_mask) * du;

@@ -15,6 +15,7 @@
 #include "esolid.h"
 #include "eview.h"
 #include "gameflow.h"
+#include "logwriter.h"
 #include "texturepack.h"
 #include "trackflow.h"
 
@@ -363,6 +364,13 @@ void carrenderinfo_create_car_light_flares(CarRenderInfo *ri)
 
         dir = (m->Param >> 8) & 0xff;
         f = bSlotOMalloc(eLightFlareSlotPool);
+        if (f == NULL) {
+            // The flare pool (160 slots) is full: a car can be drawn
+            // without the rest of its light flares. R36S v42: this
+            // used to dereference the NULL slot and fault in the
+            // carsel load (showLoadedCar -> carrenderinfo_construct).
+            continue;
+        }
         f->Type = (int8_t)type;
         f->Enabled = 1;
         f->Name[0] = 0;
@@ -456,6 +464,17 @@ CarRenderInfo *carrenderinfo_construct(CarRenderInfo *ri, RideInfo *ride,
 
     // The models' constructors, each clearing its name and solid, from
     // Body to the tachometer's needle.
+    // R36S v43 DIAG: the render-info build's entry, drained. A fault
+    // anywhere in this long function leaves this line as the last one.
+    {
+        char buf[128];
+        int m = snprintf(buf, sizeof buf,
+                         "DIAG load: renderinfo_construct type=%d skin=%d\n",
+                         (int)ride->Type, (int)ride->SkinNumber);
+        if (m > 0)
+            logwriter_put(buf, (size_t)m);
+        logwriter_drain();
+    }
     clear_models(ri->Body, 4);
     clear_models(&ri->Tires[0][0], 6);
     clear_models(ri->TireBlur, 2);
@@ -791,6 +810,10 @@ CarRenderInfo *carrenderinfo_construct(CarRenderInfo *ri, RideInfo *ride,
     c.z += n.z * ct->Wheels[0].Radius;
     c.w += n.w * ct->Wheels[0].Radius;
     carrenderinfo_init_part(ri->PartCuller, CULLABLE_CAR_PART_SHADOW, &c);
+    // R36S v43 DIAG: the render-info build finished, drained.
+    logwriter_put("DIAG load: renderinfo_construct done\n",
+                  sizeof("DIAG load: renderinfo_construct done\n") - 1);
+    logwriter_drain();
     return ri;
 }
 

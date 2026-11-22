@@ -38,6 +38,7 @@ int32_t ForceAllAICarsToBeThisType = -1;    // gp-23116
 int32_t MaximumNumAICars = 7;               // gp-23112
 int32_t TunePreRaceSequence;                // gp-23108
 int32_t ConfigDebugLog;                     // the port's own
+char ConfigPlayerName[12];                  // the port's own, "" = none
 int32_t ConfigGpuSends = 1;                 // the port's own
 int32_t ConfigKernelFlush = 1;              // the port's own
 int32_t ConfigClusterCull = 1;              // the port's own
@@ -151,51 +152,119 @@ static void config_log(ConfigItemsLogFn log, const char *fmt,
     log(line);
 }
 
-// One line, NUL-terminated and stripped of its comment.
+// One line, NUL-terminated and stripped of its comment. The file is
+// shell syntax (NFSHP2.sh sources it), so the form is Key=Value: spaces
+// around '=' are allowed, and a value may be wrapped in one pair of
+// double quotes, which are stripped. The NFSHP2_* lines are the
+// launcher's; the game reads those through getenv, so they are ignored
+// here, silently — they belong in this file.
 static int config_apply_line(char *line, int *skipFE, ConfigItemsLogFn log)
 {
-    char name[64], value[64], extra[2];
+    char name[64];
+    char *p = line;
+    char *eq, *v, *end;
     const ConfigItem *it = NULL;
-    char *end;
-    size_t i;
+    size_t i, nlen;
     long n;
     float f;
-    int got = sscanf(line, "%63s %63s %1s", name, value, extra);
 
-    if (got <= 0)
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (*p == '\0')
         return 0;
-    if (got != 2) {
+    eq = strchr(p, '=');
+    if (eq == NULL) {
         config_log(log, "config: skipped \"%s\"%s", line, "");
         return 0;
     }
-    if (strcmp(name, "SkipFE") != 0) {
-        for (i = 0; i < sizeof kConfigItems / sizeof kConfigItems[0]; i++)
-            if (strcmp(name, kConfigItems[i].Name) == 0)
-                it = &kConfigItems[i];
-        if (it == NULL) {
-            config_log(log, "config: no item %s%s", name, "");
+    end = eq;
+    while (end > p && (end[-1] == ' ' || end[-1] == '\t'))
+        end--;
+    nlen = (size_t)(end - p);
+    if (nlen == 0 || nlen >= sizeof name) {
+        config_log(log, "config: skipped \"%s\"%s", line, "");
+        return 0;
+    }
+    memcpy(name, p, nlen);
+    name[nlen] = '\0';
+    v = eq + 1;
+    while (*v == ' ' || *v == '\t')
+        v++;
+    end = v + strlen(v);
+    while (end > v && (end[-1] == ' ' || end[-1] == '\t'))
+        end--;
+    *end = '\0';
+    if (end - v >= 2 && v[0] == '"' && end[-1] == '"') {
+        v++;
+        end--;
+        *end = '\0';
+        while (*v == ' ' || *v == '\t')
+            v++;
+        end = v + strlen(v);
+        while (end > v && (end[-1] == ' ' || end[-1] == '\t'))
+            end--;
+        *end = '\0';
+    }
+    if (strncmp(name, "NFSHP2_", 7) == 0)
+        return 0;
+    // "PlayerName=<name>": the only string item in the file, so it is
+    // parsed on its own. The value is the rest of the line after '='
+    // (spaces allowed, so a name with a space is written quoted:
+    // PlayerName="Volkan Tolky"); it is filtered to the Player Names
+    // screen's characters (nameentry.c's nameentry_char_ok: a-z A-Z 0-9
+    // ! . # space) and cut to 11, like a typed name. Anything else —
+    // including Turkish diacritics, which are non-ASCII bytes — is
+    // dropped. A '#' cannot reach here: the caller strips comments
+    // first. An empty value clears the name; the last PlayerName line
+    // in the file wins.
+    if (strcmp(name, "PlayerName") == 0) {
+        char *dst = ConfigPlayerName;
+        int n = 0;
+
+        for (; *v != '\0' && n < 11; v++) {
+            unsigned char c = (unsigned char)*v;
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9') || c == '!' || c == '.'
+                || c == '#' || c == ' ')
+                dst[n++] = (char)c;
+        }
+        dst[n] = '\0';
+        config_log(log, "config: PlayerName = %s%s", ConfigPlayerName, "");
+        return 1;
+    }
+    if (strcmp(name, "SkipFE") == 0) {
+        n = strtol(v, &end, 0);
+        if (end == v || *end != '\0') {
+            config_log(log, "config: %s: bad value %s", name, v);
             return 0;
         }
+        *skipFE = (int)n;
+        config_log(log, "config: %s = %s", name, v);
+        return 1;
     }
-    if (it != NULL && it->IsFloat) {
-        f = strtof(value, &end);
-        if (end == value || *end != '\0') {
-            config_log(log, "config: %s: bad value %s", name, value);
+    for (i = 0; i < sizeof kConfigItems / sizeof kConfigItems[0]; i++)
+        if (strcmp(name, kConfigItems[i].Name) == 0)
+            it = &kConfigItems[i];
+    if (it == NULL) {
+        config_log(log, "config: no item %s%s", name, "");
+        return 0;
+    }
+    if (it->IsFloat) {
+        f = strtof(v, &end);
+        if (end == v || *end != '\0') {
+            config_log(log, "config: %s: bad value %s", name, v);
             return 0;
         }
         *(float *)it->Word = f;
     } else {
-        n = strtol(value, &end, 0);
-        if (end == value || *end != '\0') {
-            config_log(log, "config: %s: bad value %s", name, value);
+        n = strtol(v, &end, 0);
+        if (end == v || *end != '\0') {
+            config_log(log, "config: %s: bad value %s", name, v);
             return 0;
         }
-        if (it != NULL)
-            *(int32_t *)it->Word = (int32_t)n;
-        else
-            *skipFE = (int)n;
+        *(int32_t *)it->Word = (int32_t)n;
     }
-    config_log(log, "config: %s = %s", name, value);
+    config_log(log, "config: %s = %s", name, v);
     return 1;
 }
 
@@ -221,4 +290,83 @@ int config_items_apply_text(const char *text, int *skipFE,
             text++;
     }
     return set;
+}
+
+// R36S: write the Options screen's Wireless toggle back into the config
+// file, so it holds across boots. Every other line is kept byte for byte
+// (a "# ..." comment, a blank line, and the launcher's NFSHP2_* lines
+// included); a "WirelessOff=..." line's value is replaced, or the line is
+// appended when there is none. The file is only read at boot otherwise,
+// so a write here is the toggle's persistence. The new content is built
+// whole in memory first and the file is opened only to write it, so a
+// failure cannot leave a half-written file for NFSHP2.sh to source at
+// the next launch. 1 when the file was written, 0 when it could not be
+// (the toggle still holds for this session; the next boot reads the old
+// value).
+int config_save_wireless_off(void)
+{
+    static char text[8192];
+    static char out[8192 + 32];
+    FILE*       f = fopen(CONFIG_ITEMS_FILE, "rb");
+    size_t      n = 0, at = 0, found = 0;
+    const char* p;
+
+    if (f != NULL) {
+        n = fread(text, 1, sizeof text - 1, f);
+        fclose(f);
+        if (n >= sizeof text - 1) return 0;   // too big to rewrite safely
+        text[n] = '\0';
+    } else {
+        text[0] = '\0';
+    }
+    p = text;
+    while (*p != '\0') {
+        size_t len = strcspn(p, "\r\n");
+        const char *k = p, *eq;
+        size_t klen;
+
+        // A "WirelessOff=..." line: replace the whole line with the
+        // current value. A "# ..." comment line never matches, and a
+        // bare "WirelessOff" with no '=' is left alone (the appended
+        // line below is the one the reader takes).
+        while (*k == ' ' || *k == '\t')
+            k++;
+        eq = memchr(k, '=', len - (size_t)(k - p));
+        klen = 0;
+        if (eq != NULL) {
+            const char *ke = eq;
+            while (ke > k && (ke[-1] == ' ' || ke[-1] == '\t'))
+                ke--;
+            klen = (size_t)(ke - k);
+        }
+        if (eq != NULL && klen == strlen("WirelessOff")
+            && memcmp(k, "WirelessOff", klen) == 0) {
+            at += (size_t)snprintf(out + at, sizeof out - at,
+                                   "WirelessOff=%d\n",
+                                   (int)ConfigWirelessOff);
+            found = 1;
+        } else {
+            if (at + len + 1 >= sizeof out) return 0;
+            memcpy(out + at, p, len);
+            at += len;
+            out[at++] = '\n';
+        }
+        p += len;
+        // One line ending only: a blank line is a lone '\n' of its own,
+        // and swallowing it here would drop it from the file.
+        if (*p == '\r') p++;
+        if (*p == '\n') p++;
+    }
+    if (!found)
+        at += (size_t)snprintf(out + at, sizeof out - at, "WirelessOff=%d\n",
+                               (int)ConfigWirelessOff);
+    out[at] = '\0';
+    f = fopen(CONFIG_ITEMS_FILE, "wb");
+    if (f == NULL) return 0;
+    if (fwrite(out, 1, at, f) != at) {
+        fclose(f);
+        return 0;
+    }
+    if (fclose(f) != 0) return 0;
+    return 1;
 }
