@@ -4,6 +4,33 @@ An unofficial native port of the PlayStation 2 version of **Need for Speed: Hot 
 
 It is the PS2 game itself, not an emulator or a remake: the code was reverse-engineered function-by-function from the retail PAL disc (`SLES-50731`) and reimplemented in C. It runs from your own disc's assets, which you install on the device. Every PS2 release is supported: USA SLUS-20362, Europe SLES-50731 (v1.00 or v2.00), Asia SLPM-65181 or Korea SLPM-67527 (see [docs/releases.md](docs/releases.md)). **No proprietary game data is distributed with this repository.**
 
+## What's New in This Fork (Volkynfshp2)
+
+This fork is maintained by Volkybaba for the Anbernic **RG353V** (dArkOS) and Volkyport. It is based on the upstream NFSHP2-R36S port, with the following changes from the original:
+
+### RG353V & Volkyport
+- Runs on the Anbernic RG353V with dArkOS (Debian-based ArkOS).
+- Distributed as the **Volkynfshp2** port for Volkyport (Volkan's own program).
+- Launcher and port files adapted for Volkyport (`Volkynfshp2.sh`, `nfshp2.gptk`).
+
+### Turkish
+- Full Turkish translation (menus, HUD, dialogs) in ASCII Turkish, no diacritics. Turkish is the first language.
+- Player name is set from the config file (`PlayerName`), no in-game keyboard needed.
+
+### Fixes & Improvements (up to v63)
+- Save/load fixed (saves now load reliably).
+- Music and sound-effect delay fixed.
+- Race-exit and demo crash fixed.
+- Cobra car crash fixed.
+- Replay checksum fixed; replay header and Pause → Options now show the player's name correctly.
+- Total audio loss on dArkOS fixed.
+- In-game grid names and Options player names widened to 12 characters.
+- Installer now finds the correct HP2 disc when several ISOs are present.
+- Custom jukebox (23 songs: Pop, Rock, Techno).
+- Brightness setting in config.
+- Full unlocked profile included (all events, cars, tracks).
+- Analog steering (left stick) and triggers for gas/brake via SDL_GameController, plus RG353V gamepad mapping.
+
 ---
 
 ## Features
