@@ -27,18 +27,15 @@ for f in NFSHP2.sh port.json README.md gameinfo.xml; do
     cp "$here/portmaster/$f" "$port/$f"
 done
 cp "$here/portmaster/screenshot.jpg" "$port/screenshot.jpg"
-cp "$here/portmaster/cover.jpg" "$port/cover.jpg"
 cp "$repo/LICENSE" "$port/nfshp2/licenses/LICENSE.nfshp2.txt"
 cp "$here/portmaster/gamedata.txt" "$port/nfshp2/gamedata/README.txt"
-# The settings file the launcher reads (ports/nfshp2/nfshp2.cfg on the card).
-cp "$here/portmaster/nfshp2.cfg" "$port/nfshp2/nfshp2.cfg"
 
 # The first run's install from a disc image (installer/): the patch script
 # PortMaster's patcher runs, the installer, and the repository's own tools
 # and name list it does the work with.
 mkdir -p "$port/nfshp2/tools"
 cp "$here/installer/patchscript" "$here/installer/nfshp2_install.py" "$port/nfshp2/tools/"
-for f in zdir_extract.py bhash.py lzdecompress.py audio_pack.py audio_convert.py release.py; do
+for f in zdir_extract.py bhash.py lzdecompress.py audio_pack.py audio_convert.py; do
     cp "$repo/tools/$f" "$port/nfshp2/tools/$f"
 done
 cp "$repo/docs/zdir_names_retail.txt" "$port/nfshp2/tools/"
@@ -59,4 +56,4 @@ done
 PY=python
 command -v "$PY" >/dev/null 2>&1 || PY=python3
 "$PY" "$here/scripts/make_zip.py" "$port" NFSHP2.sh nfshp2 "$out/nfshp2.zip" \
-    port.json README.md gameinfo.xml screenshot.jpg cover.jpg
+    port.json README.md gameinfo.xml screenshot.jpg
