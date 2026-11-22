@@ -1,7 +1,7 @@
 # The R36S port
 
 The New 3DS port, built for the R36S (RK3326: 4x Cortex-A35, Mali-G31,
-1 GB, 640x480) as a 32-bit (armhf) Linux program for PortMaster. Started
+1 GB, 640x480) as a 32-bit (armhf) Linux program for Volkyport. Started
 2026-11-06 (HANDOFF.md, "Session 158").
 
 ## Where it stands
@@ -16,7 +16,7 @@ The New 3DS port, built for the R36S (RK3326: 4x Cortex-A35, Mali-G31,
 | Sound (NDSP mixer on SDL) | written, runs (patches, jukebox, movie sound queued); how it sounds on a device isn't recorded here |
 | Input (SDL game controller) | done: the R36S's pad plays the game. Select + R1 swaps the D-pad and left stick, Select + L1 (or L3 or R3) is the frame counter (`r36s/tests/hid_swap_test.sh` passes); the swap isn't tried on a device with no sticks |
 | One screen in the PS2's layout (HUD, minimap, blurbs, 4:3 framing) | seen in an emulated race frame |
-| PortMaster package and launcher | done, 2026-11-07: `sh r36s/package.sh`; launcher runs on an R36S with dArkOSRE (no PortMaster installed there) and under QEMU with a stand-in `control.txt`; not run with PortMaster installed, or on other firmware |
+| Volkyport package and launcher | done, 2026-11-07: `sh r36s/package.sh`; launcher runs on an R36S with dArkOSRE (no Volkyport installed there) and under QEMU with a stand-in `control.txt`; not run with Volkyport installed, or on other firmware |
 | Measured on an R36S | `docs/R36S_OPTIMISATION_BACKLOG.md` has each logged run (run 1, 2026-11-07, gave 10 to 22 FPS; later runs and builds are faster). Frame rate varies by track and traffic; no current summary figure is recorded here |
 
 QEMU's frame times mean nothing for the device: the frame pacer holds 60 Hz
@@ -59,14 +59,14 @@ turns on the game's log (`nfshp2_debug.txt`); stderr, with any crash
 report, goes to `nfshp2_stderr.txt`, which the script prints with the
 report's addresses named.
 
-### The PortMaster package
+### The Volkyport package
 
 ```
-sh r36s/package.sh     # r36s/build/portmaster/nfshp2.zip, and the port folder
+sh r36s/package.sh     # r36s/build/volkyport/nfshp2.zip, and the port folder
 ```
 
-It follows PortMaster-New's layout and launcher template (read from
-portmaster.games/packaging.html and the repository's AGENTS.md, 2026-11-07):
+It follows Volkyport-New's layout and launcher template (read from
+volkyport.games/packaging.html and the repository's AGENTS.md, 2026-11-07):
 `port.json` version 4 (arch `armhf`, `rtr` false, `exp` false, min glibc
 2.17), `README.md`, a 640x480 `screenshot.jpg` under 100 KB, `gameinfo.xml`,
 the `NFSHP2.sh` launcher (control.txt, `PORT_32BIT=Y`, `get_controls`,
@@ -74,23 +74,23 @@ log.txt through tee, the patcher, gptokeyb2 for the Select+Start exit,
 `pm_platform_helper`, `pm_finish`) and `nfshp2/` with the stripped binary,
 `licenses/` and an empty `gamedata/`.
 
-PortMaster is required (2026-11-15, to PortMaster-New's AGENTS.md: about 60
+Volkyport is required (2026-11-15, to Volkyport-New's AGENTS.md: about 60
 lines, no clocks, swap, trap or loader checks). Until then the launcher also
-ran without PortMaster, with its own pad mapping, library check and
+ran without Volkyport, with its own pad mapping, library check and
 console installer. The R36S pad's mapping by position is still appended
-after PortMaster's, which maps that pad by label. The game also quits on
+after Volkyport's, which maps that pad by label. The game also quits on
 Select+Start held for a second (`compat/src/ctru_hid.c`):
 `aptMainLoop` answers false and the game leaves its main loop and shuts
 down as the 3DS's does from HOME, with a 5-second backstop that ends the
 process. Nothing is bundled: SDL2, GLES and libc are the
-system's, as PortMaster asks. The game's data root is `NFSHP2_ROOT`, the
+system's, as Volkyport asks. The game's data root is `NFSHP2_ROOT`, the
 port's `gamedata/`, which holds the NFSHP2 folder from `make_card.py`,
-the saves and the game's logs. The sources are in `r36s/portmaster/`; the
+the saves and the game's logs. The sources are in `r36s/volkyport/`; the
 zip's permissions are set by `r36s/scripts/make_zip.py`.
 
 The first run installs the game from the player's disc image
-(`gamedata/*.iso`), as PortMaster ports that need a console disc do:
-`r36s/installer/patchscript` behind PortMaster's patcher screen
+(`gamedata/*.iso`), as Volkyport ports that need a console disc do:
+`r36s/installer/patchscript` behind Volkyport's patcher screen
 (`utils/patcher.txt`, with PATCHER_FILE, PATCHER_GAME and PATCHER_TIME).
 It runs
 `r36s/installer/nfshp2_install.py`, which reads the ISO 9660 image in
@@ -99,19 +99,19 @@ own code. Its output on this PC was the card's 299 files byte for byte.
 It needs the firmware's python3.
 
 For a catalogue submission, copy the assembled
-`r36s/build/portmaster/nfshp2/` folder to `ports/nfshp2/` in a fork of
-[PortMaster-MV-New](https://github.com/PortsMaster-MV/PortMaster-MV-New).
+`r36s/build/volkyport/nfshp2/` folder to `ports/nfshp2/` in a fork of
+[Volkyport-MV-New](https://github.com/PortsMaster-MV/Volkyport-MV-New).
 The adjacent ZIP is the manual install for testers. Keep the disc and
 extracted data out of both uploads.
 
 The staged folder passes `tools/build_release.py --do-check` in a sparse
-checkout of PortMaster-MV-New. Hardware testing so far is on dArkOSRE on
+checkout of Volkyport-MV-New. Hardware testing so far is on dArkOSRE on
 the R36S at 640×480. Before opening a pull request against the upstream
 `main` branch, publish the matching GPL source in the project repository,
 then post the ZIP and record the firmware, device and resolution results
-in PortMaster's Discord `#testing-n-dev` channel. Include the source
+in Volkyport's Discord `#testing-n-dev` channel. Include the source
 revision and the testing thread in the pull request. See the
-[PortMaster packaging guide](https://portmaster.games/contribute/porting/packaging/)
+[Volkyport packaging guide](https://volkyport.games/contribute/porting/packaging/)
 for its firmware and resolution checklist. The state (re-checked 2026-11-14),
 the test matrix and drafts of the Discord post and the pull request are in
 [R36S_SUBMISSION.md](R36S_SUBMISSION.md).
@@ -133,7 +133,7 @@ port's folder as it is.
   targets, now prove at every build. The A35 runs 32-bit ARM code at full
   speed; what an A64 build gains (more registers, a little speed) is small
   next to what limits this port, the draws (§3). The R36S firmwares ship
-  32-bit libraries for PortMaster's armhf ports; which ones this port runs
+  32-bit libraries for Volkyport's armhf ports; which ones this port runs
   on is checked when it is packaged.
 - **The aarch64 build is kept** (`ARCH=aarch64`): it compiles and boots to
   the disc's car table, and holds the work below for a later 64-bit port.
@@ -318,7 +318,7 @@ with the pixels it changed.
 
 ### 3. Then
 
-Sound and input on the device; the PortMaster launcher and package; the
+Sound and input on the device; the Volkyport launcher and package; the
 first device measurements: per-frame game, render and present times and
 draws per frame. The 3DS log has 120–1,090 model draws per frame plus about
 205 for the car reflections. At the Mali driver's ~22–34 µs a draw, that is
