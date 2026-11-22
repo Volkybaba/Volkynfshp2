@@ -1,7 +1,6 @@
 #include "gamedata.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 static char s_root[GAMEDATA_MAX_PATH];
@@ -10,11 +9,6 @@ static bool s_ready;
 static const char* const kDefaults[] = {
     "sdmc:/3ds/NFSHP2-3DS/data",
     "sdmc:/NFSHP2",
-};
-
-static const char* const kConfigDirs[] = {
-    "",                        // next to the executable
-    "sdmc:/3ds/NFSHP2-3DS/",
 };
 
 static void set_root(const char* path)
@@ -34,8 +28,9 @@ static bool file_exists(const char* path)
     return true;
 }
 
-// A candidate counts only if the sentinel is in it, so a stale config file
-// falls through to a default rather than leaving the game pointed at nothing.
+// A candidate counts only if the sentinel is in it, so a stale pointer
+// falls through to a default rather than leaving the game pointed at
+// nothing.
 static bool candidate_ok(const char* dir)
 {
     char path[GAMEDATA_MAX_PATH];
@@ -44,49 +39,15 @@ static bool candidate_ok(const char* dir)
     return file_exists(path);
 }
 
-// The config file's first non-empty, non-comment line, trimmed.
-static bool read_config(const char* dir, char* out, size_t cap)
-{
-    char path[GAMEDATA_MAX_PATH];
-    if (snprintf(path, sizeof(path), "%s%s", dir, GAMEDATA_CONFIG)
-        >= (int)sizeof(path))
-        return false;
-
-    FILE* f = fopen(path, "r");
-    if (!f) return false;
-
-    char line[GAMEDATA_MAX_PATH];
-    bool got = false;
-    while (fgets(line, sizeof(line), f)) {
-        char* p = line;
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p == '#' || *p == '\r' || *p == '\n' || *p == '\0') continue;
-        char* end = p + strlen(p);
-        while (end > p && (end[-1] == '\r' || end[-1] == '\n'
-                           || end[-1] == ' ' || end[-1] == '\t')) end--;
-        *end = '\0';
-        // A bare relative path in the config means somewhere under the SD
-        // card root; anything with a drive prefix is taken as written.
-        if (strchr(p, ':') == NULL)
-            got = snprintf(out, cap, "sdmc:/%s", p) < (int)cap;
-        else
-            got = snprintf(out, cap, "%s", p) < (int)cap;
-        break;
-    }
-    fclose(f);
-    return got;
-}
-
 bool gamedata_init(void)
 {
     if (s_ready) return true;
 
-    char configured[GAMEDATA_MAX_PATH];
-    for (size_t i = 0; i < sizeof(kConfigDirs) / sizeof(kConfigDirs[0]); i++) {
-        if (!read_config(kConfigDirs[i], configured, sizeof(configured)))
-            continue;
-        if (candidate_ok(configured)) { s_ready = true; return true; }
-    }
+    // The data directory is one of the two defaults. There used to be a
+    // third source, a nfshp2_config.txt next to the executable naming the
+    // directory; it is gone (2026-11-18, v40 — the settings file of that
+    // name was folded into the launcher's nfshp2.cfg, and no .txt is read
+    // any more), so the defaults are the whole search.
     for (size_t i = 0; i < sizeof(kDefaults) / sizeof(kDefaults[0]); i++)
         if (candidate_ok(kDefaults[i])) { s_ready = true; return true; }
 
@@ -113,13 +74,4 @@ bool gamedata_exists(const char* rel)
     char path[GAMEDATA_MAX_PATH];
     if (!gamedata_path(rel, path, sizeof(path))) return false;
     return file_exists(path);
-}
-
-int gamedata_video_mode(void)
-{
-    const char* e = getenv("NFSHP2_REGION");
-    if (e && (e[0] == 'N' || e[0] == 'n')) return 1;
-    if (e && (e[0] == 'P' || e[0] == 'p')) return 0;
-    if (gamedata_exists("PAL.TAG")) return 0;
-    return gamedata_exists("RELEASE.TXT") ? 1 : 0;
 }

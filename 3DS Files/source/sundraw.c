@@ -181,7 +181,7 @@ void StuffSunGlare(eView *view)
     const SunChunkInfoE *info  = &SunGlareInfo;
     float                size  = 0.0f;
     float                alpha = 1.0f;
-    float                el, halfW, halfH, w, h, sx, sy, m, maxz;
+    float                el, halfW, halfH, w, h, sx, sy, m;
     int32_t              now, phase;
     eRenderTarget       *rt;
     Camera              *cam;
@@ -235,10 +235,16 @@ void StuffSunGlare(eView *view)
     default:
         break;
     }
+#ifdef NFSHP2_R36S
+    /* The glare is too bright here: its CPU fade is dead (the
+       Z-buffer readback needs a 240x400 3DS tiled target, so the
+       rect is never filled and the fade is always 1.0), and the
+       present shader multiplies the frame by 1.85. Halve it. */
+    alpha *= 0.5f;
+#endif
 
     rt    = view->pRenderTarget0;
     cam   = view->pCamera;
-    maxz  = rt->MaxZ;
     w     = (float)rt->ScissorW;
     h     = (float)rt->ScissorH;
     halfW = (float)(rt->ScissorW >> 1);
@@ -260,7 +266,12 @@ void StuffSunGlare(eView *view)
     }
 
     begin_poly(&poly);
-    set_z(&poly, maxz);
+    /* R36S: every layer at the sky-only z, like StuffSun's first.
+       At maxz the compat gives depth -1, which draws with no depth
+       test at all, so the glare showed through bridges and tunnels.
+       The CPU fade that hid it on retail is dead here, so the depth
+       test is the only occlusion left. */
+    set_z(&poly, SKY_ONLY_Z);
     for (i = 0; i < SUN_NUM_LAYERS; i++) {
         const SunLayer *l   = &info->SunLayers[i];
         TextureInfo    *tex = SunTextures[l->Texture];
@@ -280,7 +291,7 @@ void StuffSun(eView *view)
     SunZBuffer    *zb;
     bVector4       pos;
     ePoly          poly;
-    float          halfW, halfH, w, h, sx, sy, m, count, maxz;
+    float          halfW, halfH, w, h, sx, sy, m, count;
     int32_t        sw, sh, x0, y0, x, y, startX, endX, startY, endY;
     int            i;
 
@@ -294,7 +305,6 @@ void StuffSun(eView *view)
     pos.z = info->PositionZ;
     pos.w = 1.0f;
     rt    = view->pRenderTarget0;
-    maxz  = rt->MaxZ;
     sw    = rt->ScissorW;
     sh    = rt->ScissorH;
     halfW = (float)(sw >> 1);
@@ -320,6 +330,11 @@ void StuffSun(eView *view)
         }
     }
     count *= 1.0f / 1024.0f;
+#ifdef NFSHP2_R36S
+    /* Halve the sun: its CPU fade is dead (see the glare above), so
+       it never dims, and the present shader multiplies it by 1.85. */
+    count *= 0.5f;
+#endif
 
     begin_poly(&poly);
     for (i = 0; i < SUN_NUM_LAYERS; i++) {
@@ -329,7 +344,10 @@ void StuffSun(eView *view)
         if (tex == NULL || l->IntensityScale == 0.0f) {
             continue;
         }
-        set_z(&poly, i == 0 ? SKY_ONLY_Z : maxz);
+        /* R36S: every layer at the sky-only z (see the glare above):
+           at maxz the compat gives depth -1, no depth test, and the
+           halo showed through bridges and tunnels. */
+        set_z(&poly, SKY_ONLY_Z);
         draw_layer(&poly, l, tex, sx, sy, m, w + m, l->Size * 0.5f,
                    l->IntensityScale, count);
     }

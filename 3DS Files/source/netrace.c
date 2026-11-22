@@ -63,7 +63,7 @@ static void say(const char* fmt, ...)
 
 static const char* text(const BGameFlow* gf, int32_t id)
 {
-    const char* s = portlang_get(gf->currLanguage, id, NULL);
+    const char* s = portlang_get_list(gf->currLanguage, id, NULL);
     return s ? s : "";
 }
 

@@ -354,7 +354,7 @@ static void askToSave(BGameFlow* gf, NameEntry* e)
                        | BPOPUP_BUTTONS_BELOW;
     cfg.parent         = gf->screen;
     cfg.screen         = BPOPUP_SCREEN_MEMCARD;
-    cfg.message        = portlang_get(gf->currLanguage,
+    cfg.message        = portlang_get_list(gf->currLanguage,
                                       PORTLANG_SAVE_CHANGES, NULL);
     cfg.button[0]      = LANG_YES;
     cfg.button[1]      = LANG_NO;

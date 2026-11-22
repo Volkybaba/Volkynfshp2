@@ -408,7 +408,11 @@ void fred_init_with_defaults(FrontendDatabase *f)
     p0->AccumulatedPoints = 0;
     p1->AccumulatedPoints = 0;
     f->NumPlayerCars = 1;
-    f->Autosave = 0;
+    // Autosave starts on: a fresh save has it on, and a loaded save is
+    // forced on at load (testerOverwriteFred), so the Save/Load screen
+    // never opens with it off. The screen's toggle still works within
+    // a session; the next load turns it on again.
+    f->Autosave = 1;
     f->SavedSizeofFred = (int32_t)sizeof(FrontendDatabase);
     // DataChallengeScreen (0x001b5e10) and DataBeTheCopSetup (0x001b93e0).
     f->ChallengeScreenData[0] = 1;
@@ -445,10 +449,85 @@ void fred_init_with_defaults(FrontendDatabase *f)
               translate(FRED_PLAYER1_NAME_ID), FRED_NAME_COPY);
     b_strncpy(p1->mPlayerSettings.PlayerName,
               translate(FRED_PLAYER2_NAME_ID), FRED_NAME_COPY);
+    // A PlayerName line in the config file beats the translated default:
+    // the Player Names screen cannot type on this device, so the file is
+    // the only way to set a custom name. Applied to p0 (this function's
+    // f), not the global, so it is right even if f is not &Fred.
+    if (ConfigPlayerName[0] != '\0')
+        b_strncpy(p0->mPlayerSettings.PlayerName, ConfigPlayerName,
+                  FRED_NAME_COPY);
     f->bRaceWasAborted = 0;
 }
 
 void init_fred(void)
 {
     fred_init_with_defaults(&Fred);
+}
+
+// The default player names, in every language the game ships: the word
+// for "player" in that language + the player number, no space. EN and TR
+// are read from the FE files (Player1/Player2, Oyuncu1/Oyuncu2); FR/DE/
+// IT/ES follow the same pattern (Joueur/Spieler/Giocatore/Jugador) and
+// SE is Spelare. The retail FE files for those five are not in this
+// workspace, so a name from one of them that differs is simply left
+// alone -- today's behaviour, nothing is overwritten wrongly.
+static const char* const kDefaultPlayer1Names[] = {
+    "Player1", "Joueur1", "Spieler1", "Giocatore1", "Jugador1", "Spelare1", "Oyuncu1",
+};
+static const char* const kDefaultPlayer2Names[] = {
+    "Player2", "Joueur2", "Spieler2", "Giocatore2", "Jugador2", "Spelare2", "Oyuncu2",
+};
+
+static int is_default_player_name(const char* name, const char* const* table, int n)
+{
+    for (int i = 0; i < n; i++)
+        if (strcmp(name, table[i]) == 0) return 1;
+    return 0;
+}
+
+// The config file's "PlayerName <name>" line (configitems.c): write it
+// over Player 1's stored name in the global Fred. 1 when a name was set,
+// 0 when the file has no PlayerName line (or it is empty). Called after
+// a save loads over Fred (testerOverwriteFred), which would otherwise put
+// the save's stored name back, and on a language change (below), where
+// the config name must win over the default-follow logic.
+int fred_apply_config_player_name(void)
+{
+    if (ConfigPlayerName[0] == '\0')
+        return 0;
+    b_strncpy(Fred.FrontendPlayers[0].mPlayerSettings.PlayerName,
+              ConfigPlayerName, FRED_NAME_COPY);
+    return 1;
+}
+
+// A language change re-names a stored player name that is still a
+// default in some language, in the new language. A name the player typed
+// on the Player Names screen is left alone. Call after the new language's
+// FE file is loaded, so translate() answers in the new language. The
+// renamed name lives in the in-memory Fred only; the normal save path
+// writes it to the card when the player next saves.
+void fred_retranslate_default_player_names(void)
+{
+    FrontendPlayerInfo* p0 = &Fred.FrontendPlayers[0];
+    FrontendPlayerInfo* p1 = &Fred.FrontendPlayers[1];
+    const char* d;
+    // translate() answers in one shared buffer (fredTranslate's static
+    // text[512]): use each answer before translating the next one, or
+    // the second call overwrites the first and Player 1 never updates.
+    // translate() answers "NOT TRANSLATED PROPERLY" when no FE table is
+    // loaded yet (boot, before the first language file); that is not a
+    // known default, so nothing is written then.
+    // A PlayerName line in the config file wins over this whole step for
+    // Player 1: it is a name the player chose, so a language change must
+    // not replace it with a default. Player 2 still follows the defaults.
+    if (!fred_apply_config_player_name()) {
+        d = translate(FRED_PLAYER1_NAME_ID);
+        if (is_default_player_name(d, kDefaultPlayer1Names, 7)
+            && is_default_player_name(p0->mPlayerSettings.PlayerName, kDefaultPlayer1Names, 7))
+            b_strncpy(p0->mPlayerSettings.PlayerName, d, FRED_NAME_COPY);
+    }
+    d = translate(FRED_PLAYER2_NAME_ID);
+    if (is_default_player_name(d, kDefaultPlayer2Names, 7)
+        && is_default_player_name(p1->mPlayerSettings.PlayerName, kDefaultPlayer2Names, 7))
+        b_strncpy(p1->mPlayerSettings.PlayerName, d, FRED_NAME_COPY);
 }

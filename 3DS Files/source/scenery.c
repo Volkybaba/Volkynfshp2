@@ -1,6 +1,7 @@
 // scenery -- see scenery.h.
 
 #include "scenery.h"
+#include "logwriter.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,8 +84,21 @@ static void add_tail(bNode *list, bNode *n)
 
 static void unlink_node(bNode *n)
 {
-    n->prev->next = n->next;
-    n->next->prev = n->prev;
+    /* R36S v15: unlink only while the node is still in its list.
+       Same stale-pointer segfault as the solid list (v12): a node
+       already unlinked (its file, or a file sharing it, unloaded
+       first) writes through stale prev/next. */
+    if (n->prev == NULL || n->next == NULL) {
+        logwriter_put("DIAG unload: scenery null node, skipped\n",
+                      sizeof("DIAG unload: scenery null node, skipped\n") - 1);
+    } else if (n->prev->next == n
+        && n->next->prev == n) {
+        n->prev->next = n->next;
+        n->next->prev = n->prev;
+    } else {
+        logwriter_put("DIAG unload: scenery already unlinked, skipped\n",
+                      sizeof("DIAG unload: scenery already unlinked, skipped\n") - 1);
+    }
 }
 
 void scenery_static_init(void)

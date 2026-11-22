@@ -1,6 +1,7 @@
 // epositionmarker -- see epositionmarker.h.
 
 #include "epositionmarker.h"
+#include "logwriter.h"
 
 #include <stddef.h>
 
@@ -54,10 +55,21 @@ int unloader_position_markers(uint8_t *chunk)
         return 0;
     m = first_marker(chunk, &n);
     for (; n != 0; n--, m++) {
-        bNode *next = m->Node.next, *prev = m->Node.prev;
-
-        prev->next = next;
-        next->prev = prev;
+        /* R36S v15: unlink only while the node is still in its list.
+           Same stale-pointer segfault as the solid list (v12): a node
+           already unlinked (its file, or a file sharing it, unloaded
+           first) writes through stale prev/next. */
+        if (m->Node.prev == NULL || m->Node.next == NULL) {
+            logwriter_put("DIAG unload: posmarker null node, skipped\n",
+                          sizeof("DIAG unload: posmarker null node, skipped\n") - 1);
+        } else if (m->Node.prev->next == &m->Node
+            && m->Node.next->prev == &m->Node) {
+            m->Node.prev->next = m->Node.next;
+            m->Node.next->prev = m->Node.prev;
+        } else {
+            logwriter_put("DIAG unload: posmarker already unlinked, skipped\n",
+                          sizeof("DIAG unload: posmarker already unlinked, skipped\n") - 1);
+        }
     }
     return 1;
 }

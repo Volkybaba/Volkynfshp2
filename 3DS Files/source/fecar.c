@@ -3,9 +3,11 @@
 #include "fecar.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "bmem.h"
 #include "emath.h"
+#include "logwriter.h"
 #include "scenerycull.h"
 
 bNode FrontEndRenderingCarList = { &FrontEndRenderingCarList,
@@ -55,6 +57,11 @@ void fecar_init(FrontEndRenderingCar *f, RideInfo *ride, int32_t view_id)
 
 void fecar_reinit(FrontEndRenderingCar *f, RideInfo *ride)
 {
+    // R36S v43 DIAG: bracket the reinit, drained. A fault inside
+    // carrenderinfo_construct leaves the entry line on the card.
+    logwriter_put("DIAG load: fecar_reinit\n",
+                  sizeof("DIAG load: fecar_reinit\n") - 1);
+    logwriter_drain();
     if (f->pRenderInfo != NULL) {
         carrenderinfo_delete(f->pRenderInfo, 3);
         f->pRenderInfo = NULL;
@@ -65,6 +72,9 @@ void fecar_reinit(FrontEndRenderingCar *f, RideInfo *ride)
             bMalloc(sizeof(CarRenderInfo), "CarRenderInfo", 0, 16),
             &f->Ride, NULL);
     }
+    logwriter_put("DIAG load: fecar_reinit done\n",
+                  sizeof("DIAG load: fecar_reinit done\n") - 1);
+    logwriter_drain();
 }
 
 void fecar_delete(FrontEndRenderingCar *f, int32_t flags)
@@ -144,11 +154,20 @@ void render_front_end_cars(eView *view, int32_t cars, int32_t reflections,
         if (FrontEndCarForceFlag16)
             flags |= 16;
         if (f->pModel != NULL) {
+            // R36S v47 DIAG: the cover/model branch, drained.
+            logwriter_put("DIAG carsel: renderModel\n",
+                          sizeof("DIAG carsel: renderModel\n") - 1);
+            logwriter_drain();
             if (gEModelRenderFn != NULL)
                 gEModelRenderFn(f->pModel, &f->BodyMatrix, NULL, flags);
             continue;
         }
 
+        // R36S v47 DIAG: the body branch — this reads ri->Body[0].Solid,
+        // which dangles once the car's geometry is unloaded. Drained.
+        logwriter_put("DIAG carsel: renderBody\n",
+                      sizeof("DIAG carsel: renderBody\n") - 1);
+        logwriter_drain();
         // Retail's box corners are its stack's when the body has no
         // solid; the port's are 0.
         emodel_get_bounding_box(&ri->Body[0], &mn, &mx);

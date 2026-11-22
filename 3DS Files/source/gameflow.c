@@ -2,6 +2,8 @@
 // decompilation this is a port of -- every rule below names an address.
 
 #include "gameflow.h"
+#include "fred.h"
+#include "logwriter.h"
 #include "portlang.h"
 
 #include <stdarg.h>
@@ -281,13 +283,6 @@ int bgf_change_to_screen(BGameFlow* gf, const char* name, int pushCurrent)
             gf->screen = n;
             screenVisible(gf, n->hash, 1);
             trace(gf, "enter %s %08x", n->name, (unsigned)n->hash);
-#ifdef NFSHP2_R36S
-            {
-                // Scripted input's NFSHP2_INPUT_AT (compat's ctru_hid.c).
-                void r36s_input_screen(const char* screen);
-                r36s_input_screen(n->name);
-            }
-#endif
             // FlailerScreen::Activate (0x0016a858) in its order: build the
             // FlailerMenu, send SCREEN_ACTIVATE, then set the current item
             // and activate the menu. The menu exists before the screen's
@@ -481,9 +476,7 @@ void bgf_init(BGameFlow* gf,
     // screen, PAL shows it. InitDisplaySystem (0x00100750) picks it with
     // bFileExists("PAL.TAG"), and the retail disc, SLES_507.31, has PAL.TAG
     // in its ZDIR (entry 405, bf0a6606): it is a PAL disc, and it asks for a
-    // language on every boot, as it does on PCSX2. The USA, Asian and
-    // Korean discs have no PAL.TAG and run NTSC. PAL here; main() sets the
-    // install's own after bgf_init (gamedata_video_mode).
+    // language on every boot, as it does on PCSX2.
     gf->videoMode            = 0;
     // LanguageManager's constructor (0x0021dfa8). LoadGlobalChunks sets
     // English before the flow starts; see bgf_load_global_chunks.
@@ -491,7 +484,7 @@ void bgf_init(BGameFlow* gf,
     gf->demoModeStatus       = 0;
     gf->legalScreenTimeout   = 7.0f;
     gf->antiPiracyTimeout    = 7.0f;
-    gf->beginDemoModeTimeout = 30.0f;
+    gf->beginDemoModeTimeout = 300.0f;
 
     // FlailerScreenList's constructor makes its two popups.
     bpopup_init(gf);
@@ -531,6 +524,8 @@ int bgf_should_see_autoload(const BGameFlow* gf)
 
 void bgf_launch_frontend_menus(BGameFlow* gf)
 {
+    /* DIAG v9: race-exit segfault yeri. */
+    logwriter_put("DIAG unload: bgf_launch_frontend_menus\n", sizeof("DIAG unload: bgf_launch_frontend_menus\n") - 1);
     char name[BGF_NAME_LEN];
 
     if (gf->frontendLaunchType == 2 && gf->demoModeStatus == 2) {
@@ -543,6 +538,17 @@ void bgf_launch_frontend_menus(BGameFlow* gf)
         const BBootStage* stage = &gf->bootStages[i];
         if (stage->shouldSee && !stage->shouldSee(gf)) continue;
         bgf_push_screen(gf, stage->screenName);
+    }
+
+    /* Ikinci ziyaret (frontendLaunchType 3, yaristan sonra) acilis
+       sirasini atlar, o yuzden hic asama itilmez. Yigin da bossa — acilis
+       asamalari giriste tukendi, unlaunch duracak "New Main Menu" bulamadi
+       — cikacak ekran yoktur ve akis IN_FRONTEND'e ekransiz ulasir
+       (siyah, girdisiz). Attract dali gibi dogrudan ana menuye git. */
+    if (bgf_stack_top(gf)[0] == '\0') {
+        bgf_reset_stack(gf);
+        bgf_change_to_screen(gf, "New Main Menu", 1);
+        return;
     }
 
     // The stack is a LIFO and this immediately pops its own top, so the LAST
@@ -672,6 +678,10 @@ void bgf_set_curr_language(BGameFlow* gf, int language)
         // longest of them, then LoadChunks.
         trace(gf, "language %d", language);
         HOOK_VOID(gf, setLanguage, language);
+        // The new language's FE file is in, so translate() answers in it:
+        // a stored player name that is still a default in some language
+        // is re-named in the new language; a typed name is left alone.
+        fred_retranslate_default_player_names();
     }
 
     // The tail, 0x0021e1e0. Speech that is in is swapped for the new
@@ -684,7 +694,9 @@ void bgf_set_curr_language(BGameFlow* gf, int language)
     // 0x001681b0: the LOADING logo and NFS_LOGO_ALPHA have French art, and
     // gp-21404 says which is in. Retail unloads the LOADING texture, remaps
     // it, reloads it and waits for the pack; the host does all of that.
-    if ((language == 1) != (gf->logoFrench != 0)) {
+    // `language` is the kLanguages list index (main.c): Turkish first, so
+    // French is 2.
+    if ((language == 2) != (gf->logoFrench != 0)) {
         gf->logoFrench ^= 1;
         trace(gf, "logo art %d", gf->logoFrench);
         HOOK_VOID(gf, swapLogoArt, gf->logoFrench);
@@ -725,7 +737,7 @@ static void frontendLoaded(BGameFlow* gf)
 
 void bgf_load_global_chunks(BGameFlow* gf)
 {
-    bgf_set_curr_language(gf, 0);   // l_ENGLISH, through 0x00100808
+    bgf_set_curr_language(gf, 0);   // l_TURKISH, through 0x00100808
 
     // LOADING_TRACK up. The copyright line is FRONTB's, on TITLE_IMAGE, and
     // FRONTB is not loaded yet, so the second call finds nothing: retail
@@ -740,6 +752,8 @@ void bgf_load_global_chunks(BGameFlow* gf)
 
 void bgf_begin_loading_frontend(BGameFlow* gf)
 {
+    /* DIAG v9: race-exit segfault yeri. */
+    logwriter_put("DIAG unload: bgf_begin_loading_frontend\n", sizeof("DIAG unload: bgf_begin_loading_frontend\n") - 1);
     // Retail stores RealTime in BeginScreenFadeTime here, for the demo
     // disc's slideshow in the Loop, and nothing else reads it.
 
@@ -767,6 +781,8 @@ void bgf_begin_loading_frontend(BGameFlow* gf)
 
 void bgf_end_loading_frontend(BGameFlow* gf)
 {
+    /* DIAG v9: race-exit segfault yeri. */
+    logwriter_put("DIAG unload: bgf_end_loading_frontend\n", sizeof("DIAG unload: bgf_end_loading_frontend\n") - 1);
     // eFixUpTables, InitCarEffects, InitFrontendSounds, InitSelectCarScreen
     // and InitMoviePlayer run here in the original. On the 3DS the renderer
     // and the bundles are already up by the time the flow starts, so what
@@ -1326,12 +1342,12 @@ static uint32_t activeMenuItem(BGameFlow* gf)
     return gf->hooks.activeMenuItem(gf->hooks.user);
 }
 
-// MENUITEM_1..6 are the languages 0..5 in order: the original adds
-// 0xad1fc60d, -MENUITEM_1, and takes anything under 6 unsigned.
+// MENUITEM_1..7 are the languages 0..6 in order: the original adds
+// 0xad1fc60d, -MENUITEM_1, and takes anything under 7 unsigned.
 static int languageOfItem(uint32_t item, int* language)
 {
     uint32_t i = item - BGF_ITEM_MENUITEM_1;
-    if (i >= 6u) return 0;
+    if (i >= 7u) return 0;
     *language = (int)i;
     return 1;
 }
@@ -1345,7 +1361,7 @@ static void languageCtor(BGameFlow* gf, uint32_t flailer, int fromOptions)
     l->fromOptions = fromOptions;
     l->selected    = gf->currLanguage == -1 ? 0 : gf->currLanguage;
     // 0x0016fdb0 is `return 0`, so Load All Languages is always hidden.
-    grayMenuItem(gf, flailer, BGF_ITEM_MENUITEM_7, 2);
+    grayMenuItem(gf, flailer, BGF_ITEM_MENUITEM_8, 2);
 }
 
 // Both of HandleScreenCallback's ways out once a language is picked:
@@ -1380,8 +1396,8 @@ static void languageEvent(BGameFlow* gf, BScreenMessage msg,
             item = data->itemHash;
             languageOfItem(item, &l->selected);
             if (item < BGF_ITEM_MENUITEM_1) return;
-            if (item > BGF_ITEM_MENUITEM_6) {
-                if (item != BGF_ITEM_MENUITEM_7) return;
+            if (item > BGF_ITEM_MENUITEM_7) {
+                if (item != BGF_ITEM_MENUITEM_8) return;
                 gf->loadAllLanguages = 1;
                 trace(gf, "load all languages");
                 bgf_move_back_screen(gf, 1);
@@ -1397,7 +1413,7 @@ static void languageEvent(BGameFlow* gf, BScreenMessage msg,
             item = activeMenuItem(gf);
             languageOfItem(item, &l->selected);
             // Signed compares, so no menu (item 0) moves back as it is.
-            if ((int32_t)item > (int32_t)BGF_ITEM_MENUITEM_6
+            if ((int32_t)item > (int32_t)BGF_ITEM_MENUITEM_7
                 || (int32_t)item < (int32_t)BGF_ITEM_MENUITEM_1) {
                 bgf_move_back_screen(gf, 1);
                 return;
@@ -1465,8 +1481,9 @@ void bgf_language_screen_callback(BGameFlow* gf, BScreenMessage msg,
 // tHighlightAnimation's do nothing but free; tSlideInAnimation's is
 // tSlideAnimation's (0x00248c08), which puts its groups back, and
 // tAnimatedBlurb's releases its two alphas and its group.
-static const uint32_t kMainMenuMasks[5] = {
+static const uint32_t kMainMenuMasks[6] = {
     BGF_MI_1_MASK, BGF_MI_2_MASK, BGF_MI_3_MASK, BGF_MI_4_MASK, BGF_MI_5_MASK,
+    BGF_MI_6_MASK,
 };
 
 // FlailerGetTopLeftX (0x00144140), through the kit's hook.
@@ -1549,7 +1566,7 @@ static void mainMenuCtor(BGameFlow* gf)
     // IndicatorMode 1, stored before AddItems, as on every screen with one:
     // the mask over the CURRENT item is the one turned off.
     bsel_set_indicator_mode(&m->sel, 1);
-    menuSelAddItems(gf, BGF_SCREEN_NEW_MAIN_MENU, kMainMenuMasks, 5);
+    menuSelAddItems(gf, BGF_SCREEN_NEW_MAIN_MENU, kMainMenuMasks, 6);
     bgf_start_movie(gf, "MOVIES\\mainmenu_movie.AVI");
     HOOK_VOID(gf, easterEggs, 1);
     groupVisible(gf, BGF_SCREEN_NEW_MAIN_MENU, BGF_GROUP_EASTER_EGG, 0);
@@ -1645,6 +1662,7 @@ static void mainMenuTick(BGameFlow* gf)
 //
 //   MENUITEM_4 "Local Wireless" ->           "Local Wireless", the lobby
 //   MENUITEM_5 "Debug Menu"     ->           "Port Debug Menu"
+//   MENUITEM_6 "Oyundan Cik"    ->           the host's clean exit (R36S)
 //
 // All push New Main Menu, so BACK from there returns here. Every
 // screen name the port's own code can reach is registered (kScreens[] in
@@ -1732,9 +1750,73 @@ static void mainMenuHighlight(BGameFlow* gf, uint32_t itemHash)
             trace(gf, "bracket %08x", (unsigned)BGF_MI_5_MASK);
             break;
         }
+        case BGF_ITEM_MENUITEM_6:
+            // R36S: "Oyundan Cik" (Exit Game). The blurb is a LanguageID,
+            // so it follows the selected language (v33: it used to be a
+            // hardcoded Turkish sentence in every language).
+            mainMenuHighlightItem(gf, BGF_MI_6_MASK, PORTLANG_EXIT_BLURB);
+            break;
         default:
             break;
     }
+}
+
+// The Yes/No buttons' language IDs, as the options pages' save prompts
+// use them with this same popup screen (FE_ENGLISH.BIN's "Yes"/"No",
+// "Evet"/"Hayir" in the Turkish file).
+#define MENU_LANG_YES 0x24a57
+#define MENU_LANG_NO  0x24a58
+
+// The Exit Game popup's answer: the button's param.
+#define EXIT_ANSWER_QUIT 1
+#define EXIT_ANSWER_STAY 0
+
+// R36S: "Oyundan Cik" asks first. The memcard screen's popup box, as the
+// options pages' save prompts use it: Yes quits, No and BACK stay. The
+// popup screen carries no opaque panel of its own -- it is only the
+// question, the title and the buttons -- so the main menu is hidden under
+// it, as every other popup caller hides its parent screen (audiooptions,
+// displayoptions, joyconfig, debugmenu, nameentry), and shown again on
+// dismiss. Left visible, the question's text lands on top of the menu
+// items. mainMenuTick holds the demo timer while a popup is up, so the
+// demo cannot start mid-question.
+static void mainMenuAskExit(BGameFlow* gf)
+{
+    BPopupConfig cfg;
+    BNewMainMenu* m = &gf->mainMenu;
+    // The question in the selected language (v33: it used to be a hardcoded
+    // Turkish sentence in every language). gFredTranslateFn resolves the
+    // LanguageID in the current language table; the Turkish string is the
+    // fallback if the lookup fails. The popup renders the message
+    // synchronously at summon, so the translate buffer is safe here.
+    const char* message = gFredTranslateFn
+        ? gFredTranslateFn(PORTLANG_EXIT_CONFIRM) : NULL;
+
+    memset(&cfg, 0, sizeof cfg);
+    cfg.numButtons     = 2;
+    cfg.flags          = BPOPUP_HORIZONTAL | BPOPUP_CANCELABLE
+                       | BPOPUP_BUTTONS_BELOW;
+    cfg.parent         = gf->screen;
+    cfg.screen         = BPOPUP_SCREEN_MEMCARD;
+    cfg.message        = message ? message
+                                 : "Oyundan cikmak istedigine emin misin?";
+    cfg.button[0]      = MENU_LANG_YES;
+    cfg.button[1]      = MENU_LANG_NO;
+    cfg.buttonParam[0] = EXIT_ANSWER_QUIT;
+    cfg.buttonParam[1] = EXIT_ANSWER_STAY;
+    cfg.cancelParam    = EXIT_ANSWER_STAY;
+    cfg.dismissParam   = EXIT_ANSWER_STAY;
+    cfg.startButton    = 0;
+    cfg.joyPort        = -1;
+    cfg.title          = PORTLANG_EXIT_GAME;
+    trace(gf, "exit game: asking");
+    if (bpopup_summon(gf, &cfg) < 0) {
+        trace(gf, "exit game: no popup free");
+        return;
+    }
+    // Hide the menu under the popup; it comes back on dismiss.
+    screenVisible(gf, BGF_SCREEN_NEW_MAIN_MENU, 0);
+    m->askingExit = 1;
 }
 
 static void mainMenuEvent(BGameFlow* gf, BScreenMessage msg,
@@ -1767,6 +1849,13 @@ static void mainMenuEvent(BGameFlow* gf, BScreenMessage msg,
                 case BGF_ITEM_MENUITEM_5:
                     bgf_change_to_screen(gf, BGF_DEBUG_MENU_NAME, 1);
                     break;
+                // R36S: "Oyundan Cik" (Exit Game). Asks first; Yes
+                // leaves the main loop, so the game shuts down
+                // cleanly, as on Select+Start. No screen change: the
+                // loop ends instead, once Yes is given.
+                case BGF_ITEM_MENUITEM_6:
+                    mainMenuAskExit(gf);
+                    break;
                 default:
                     // Every other item hash falls through the test and
                     // returns, sound and all.
@@ -1776,6 +1865,24 @@ static void mainMenuEvent(BGameFlow* gf, BScreenMessage msg,
         case BMSG_SCREEN_BACK_BUTTON:
             data->noise = 0;
             data->param = 0;
+            break;
+        case BMSG_POPUP_DISMISS:
+            // The Exit Game popup's answer. Only ours: the flag is set
+            // by mainMenuAskExit and cleared here, and mainMenuCtor
+            // zeroes the struct on every entry. The menu comes back
+            // first, as the other prompts' answered() does -- on Yes the
+            // game is leaving anyway, on No/BACK the menu must be
+            // visible again.
+            if (gf->mainMenu.askingExit) {
+                gf->mainMenu.askingExit = 0;
+                screenVisible(gf, BGF_SCREEN_NEW_MAIN_MENU, 1);
+                if (data && data->param == EXIT_ANSWER_QUIT) {
+                    trace(gf, "exit game: yes");
+                    HOOK_VOID0(gf, requestQuit);
+                } else {
+                    trace(gf, "exit game: stay");
+                }
+            }
             break;
         case BMSG_SCREEN_TICK:
             mainMenuTick(gf);

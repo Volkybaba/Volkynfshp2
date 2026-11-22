@@ -369,10 +369,7 @@ EndGameMenusBase *points_rewards_construct(void *mem, uint32_t hash,
     EndGameScreens *s;
     const CarTypeInfo *ct;
     const char *fmt;
-    // 256, not v1.00's 128: Europe v2.00's program gives this screen
-    // 128 bytes more stack for a longer text, the one code change between
-    // the releases (tools/release.py). A longer blurb is cut, not overrun.
-    char buf[256];
+    char buf[128];
     int32_t car;
 
     (void)data;
@@ -410,10 +407,7 @@ EndGameMenusBase *task_rewards_construct(void *mem, uint32_t hash,
 {
     EndGameMenusBase *m = (EndGameMenusBase *)mem;
     EndGameScreens *s;
-    // 256, not v1.00's 128: Europe v2.00's program gives this screen
-    // 128 bytes more stack for a longer text, the one code change between
-    // the releases (tools/release.py). A longer blurb is cut, not overrun.
-    char buf[256];
+    char buf[128];
     int32_t task, id, cop;
 
     (void)data;

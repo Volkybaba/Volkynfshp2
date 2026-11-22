@@ -18,6 +18,7 @@
 // need ee_div here and would show it in that count first.
 
 #include "track.h"
+#include "logwriter.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -113,8 +114,18 @@ static void unlink_node(TrackListNode *n)
     TrackListNode *next = node_at(n->pNext);
     TrackListNode *prev = node_at(n->pPrev);
 
-    prev->pNext = p32_of(next);
-    next->pPrev = p32_of(prev);
+    /* R36S v15: same guard as the solid/eanim lists, in p32 form: unlink
+       only while the node is still in its list. */
+    if (prev == NULL || next == NULL) {
+        logwriter_put("DIAG unload: track null node, skipped\n",
+                      sizeof("DIAG unload: track null node, skipped\n") - 1);
+    } else if (prev->pNext == p32_of(n) && next->pPrev == p32_of(n)) {
+        prev->pNext = p32_of(next);
+        next->pPrev = p32_of(prev);
+    } else {
+        logwriter_put("DIAG unload: track already unlinked, skipped\n",
+                      sizeof("DIAG unload: track already unlinked, skipped\n") - 1);
+    }
 }
 
 // bTList::AddTail.
