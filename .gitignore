@@ -42,6 +42,3 @@ Thumbs.db
 
 # The retail disc, extracted a few files at a time by zdir_extract.py --retail
 extracted-retail/
-
-# Codex temporary chat attachments
-/.codex-attachments/
