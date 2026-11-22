@@ -16,6 +16,7 @@ This fork is maintained by Volkybaba for the Anbernic **RG353V** (dArkOS) and Vo
 ### Turkish
 - Full Turkish translation (menus, HUD, dialogs) in ASCII Turkish, no diacritics. Turkish is the first language.
 - Player name is set from the config file (`PlayerName`), no in-game keyboard needed.
+- 7 languages: Turkish (added), English, French, German, Italian, Spanish, Swedish.
 
 ### Fixes & Improvements (up to v63)
 - Save/load fixed (saves now load reliably).
@@ -30,6 +31,62 @@ This fork is maintained by Volkybaba for the Anbernic **RG353V** (dArkOS) and Vo
 - Brightness setting in config.
 - Full unlocked profile included (all events, cars, tracks).
 - Analog steering (left stick) and triggers for gas/brake via SDL_GameController, plus RG353V gamepad mapping.
+
+## Bu Fork'ta Neler Yeni (Volkynfshp2)
+
+Bu fork, Volkybaba tarafından Anbernic **RG353V** (dArkOS) ve Volkyport için hazırlanmıştır. Upstream NFSHP2-R36S portunu temel alır, orijinalinden farkları şunlardır:
+
+### RG353V & Volkyport
+- Anbernic RG353V'de dArkOS (Debian tabanlı ArkOS) ile çalışır.
+- **Volkynfshp2** portu olarak Volkyport için dağıtılır (Volkan'ın kendi programı).
+- Başlatıcı ve port dosyaları Volkyport için uyarlandı (`Volkynfshp2.sh`, `nfshp2.gptk`).
+
+### Türkçe
+- Tam Türkçe çeviri (menüler, HUD, diyaloglar), ASCII Türkçe, aksansız. Türkçe birinci dildir.
+- Oyuncu adı config dosyasından ayarlanır (`PlayerName`), oyun içi klavye gerekmez.
+- 7 dil: Türkçe (eklendi), İngilizce, Fransızca, Almanca, İtalyanca, İspanyolca, İsveççe.
+
+### Düzeltmeler & İyileştirmeler (v63'e kadar)
+- Kayıt/yükleme düzeltildi (kayıtlar artık güvenle yükleniyor).
+- Müzik ve ses efekti gecikmesi düzeltildi.
+- Yarış çıkışı ve demo çökmesi düzeltildi.
+- Cobra arabası çökmesi düzeltildi.
+- Replay checksum düzeltildi; replay başlığı ve Duraklat → Seçenekler artık oyuncu adını doğru gösteriyor.
+- dArkOS'ta toplam ses kaybı düzeltildi.
+- Oyun içi grid isimleri ve Seçenekler oyuncu adları 12 karaktere genişletildi.
+- Kurulum artık birkaç ISO varken doğru HP2 diskini buluyor.
+- Özel jukebox (23 şarkı: Pop, Rock, Techno).
+- Config'de parlaklık ayarı.
+- Tam açık profil dahil (tüm etkinlikler, arabalar, pistler).
+- Analog direksiyon (sol stick) ve gaz/fren için tetikler (SDL_GameController), artı RG353V gamepad eşlemesi.
+
+## Novedades de este fork (Volkynfshp2)
+
+Este fork es mantenido por Volkybaba para la Anbernic **RG353V** (dArkOS) y Volkyport. Se basa en el port upstream NFSHP2-R36S, con los siguientes cambios respecto al original:
+
+### RG353V & Volkyport
+- Funciona en la Anbernic RG353V con dArkOS (ArkOS basado en Debian).
+- Se distribuye como el port **Volkynfshp2** para Volkyport (el programa propio de Volkan).
+- Lanzador y archivos del port adaptados para Volkyport (`Volkynfshp2.sh`, `nfshp2.gptk`).
+
+### Turco
+- Traducción completa al turco (menús, HUD, diálogos) en turco ASCII, sin diacríticos. El turco es el primer idioma.
+- El nombre del jugador se ajusta desde el archivo de configuración (`PlayerName`), no se necesita teclado en el juego.
+- 7 idiomas: turco (añadido), inglés, francés, alemán, italiano, español, sueco.
+
+### Correcciones y mejoras (hasta v63)
+- Guardado/carga corregidos (las partidas ahora cargan de forma fiable).
+- Retraso de música y efectos de sonido corregido.
+- Cuelgue al salir de carrera y de demo corregido.
+- Cuelgue del coche Cobra corregido.
+- Checksum de repetición corregido; el encabezado de repetición y Pausa → Opciones ahora muestran el nombre del jugador correctamente.
+- Pérdida total de audio en dArkOS corregida.
+- Nombres de parrilla y de jugador en Opciones ampliados a 12 caracteres.
+- El instalador ahora encuentra el disco HP2 correcto cuando hay varias ISO.
+- Jukebox personalizado (23 canciones: Pop, Rock, Techno).
+- Ajuste de brillo en la configuración.
+- Perfil totalmente desbloqueado incluido (todos los eventos, coches, pistas).
+- Dirección analógica (stick izquierdo) y gatillos para acelerar/frenar con SDL_GameController, más mapeo de mando RG353V.
 
 ---
 
