@@ -519,6 +519,13 @@ void realdriver_joy_steer(JoystickPort port, JoyEvent ev, uint8_t value,
         return;
     }
     d->SteeringInput = (128.0f - (float)v) * 0.0078125f;
+#ifdef NFSHP2_R36S
+    /* RG353V'nin kucuk cubugu: kucuk itis bile cok direksiyon veriyor.
+       Egri (0.4/0.6) ters tepti — ortada olu, sonra sicrama yapti, cubuk
+       daha hassas hissedildi. Yerine duz dogrusal kazanc: ayni itiste
+       araba daha az doner, tepki butun aralikta puruzsuz kalir. */
+    d->SteeringInput *= 0.6f;
+#endif
 }
 
 void realdriver_joy_throttle(JoystickPort port, JoyEvent ev, uint8_t value,

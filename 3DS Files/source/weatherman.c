@@ -1,6 +1,7 @@
 // weatherman -- see weatherman.h.
 
 #include "weatherman.h"
+#include "logwriter.h"
 
 #include <math.h>
 #include <string.h>
@@ -73,8 +74,21 @@ void WeatherRemoveRegion(WeatherRegion *r)
     bNode *prev = r->Node.prev;
     bNode *next = r->Node.next;
 
-    prev->next = next;
-    next->prev = prev;
+    /* R36S v15: unlink only while the node is still in its list.
+       Same stale-pointer segfault as the solid list (v12): a node
+       already unlinked (its file, or a file sharing it, unloaded
+       first) writes through stale prev/next. */
+    if (r->Node.prev == NULL || r->Node.next == NULL) {
+        logwriter_put("DIAG unload: weather null node, skipped\n",
+                      sizeof("DIAG unload: weather null node, skipped\n") - 1);
+    } else if (r->Node.prev->next == &r->Node
+        && r->Node.next->prev == &r->Node) {
+        prev->next = next;
+        next->prev = prev;
+    } else {
+        logwriter_put("DIAG unload: weather already unlinked, skipped\n",
+                      sizeof("DIAG unload: weather already unlinked, skipped\n") - 1);
+    }
 }
 
 void WeatherSetRegionState(WeatherRegion *r, int32_t state)

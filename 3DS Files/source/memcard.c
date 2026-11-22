@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "bpopup.h"
+#include "fred.h"
 #include "gameflow.h"
 
 // ---------------------------------------------------------------- tracing
@@ -324,6 +325,16 @@ static void testerOverwriteFred(BMemcardTester* t)
     memcpy(fred, t->savegame->local, BMC_SAVE_SIZE);
     put32(fred + BMC_FRED_CLEARED, 0);
     put32(fred + BMC_FRED_LANGUAGE, (uint32_t)gf->currLanguage);
+    // Autosave always starts on: a save written with it off comes back
+    // on at load. The Save/Load screen's toggle still works within a
+    // session; the next load turns it on again.
+    put32(fred + BMC_FRED_AUTOSAVE, 1);
+    // A PlayerName line in the config file beats the save's stored name:
+    // the Player Names screen cannot type on this device, so the file is
+    // the only way to set a custom name. The name then persists through
+    // the normal save path. (gf->fred is &Fred — main.c sets it from
+    // fred_bytes() — so the helper's global write lands here.)
+    fred_apply_config_player_name();
     trace(gf, "fred loaded %08x %08x %u %d", (unsigned)get32(fred),
           (unsigned)get32(fred + BMC_CHECKSUM_OFFSET),
           (unsigned)get32(fred + BMC_FRED_CLEARED),

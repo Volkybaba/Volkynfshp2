@@ -383,6 +383,8 @@ static void select_item(PauseMenu *m, BScreenCallbackData *data)
         change_to_screen(kPauseBACControlsScreen, 0);
         break;
     case PAUSE_MENU_ITEM_QUIT:
+        // R36S: confirmation first — quitting mid-race abandons the
+        // race, so ask (the popup's Yes quits, as before).
         pause_menu_maybe_quit(m);
         break;
     case PAUSE_MENU_ITEM_DEBUG:

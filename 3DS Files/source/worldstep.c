@@ -17,6 +17,7 @@
 #include "collision.h"
 #include "collisionbody.h"
 #include "joylog.h"
+#include "logwriter.h"
 #include "player.h"
 #include "race.h"
 #include "rain.h"
@@ -584,11 +585,79 @@ uint16_t world_calculate_debug_checksum(World *w)
     return (uint16_t)((s >> 16) + s);
 }
 
+// v49 DIAG: the capture's per-loop checksum parts, so a replay miss can
+// say WHICH field diverged and BY HOW MUCH, instead of only that the
+// byte differed. The byte mixes three things -- the world checksum c
+// (car positions, WorldTimer, helicopter) and the random seed's low byte
+// -- and the v48 line cannot separate them. The ring records, for each
+// captured loop, the seed, c, and every car's part v (ee_trunc_w of
+// (x+y)*65536, so dv is in units of 1/65536 m of x+y: |dv|=1 is 0.015 mm
+// of float noise, |dv|=65536 is a metre, a real event).
+// v50: the ring is 8192 entries, not 1024. The v49 ring missed the
+// device's miss at loop 595: it is indexed by loop % N, and loop 595's
+// slot had been overwritten by loop 1619 (595+1024), so the lookup found
+// rec->loop 1619 != 595 and printed NOREC. A capture is bounded by the
+// 0x32000-byte log (about 4650 loops at most, by the per-loop bit
+// budget), so an 8192 ring never evicts a loop of the current capture:
+// the miss loop is always in it, even for a marker jump back to the
+// race start (loop 594, the first LAP_SNAPSHOT). Written only while
+// capturing, read only on a miss; behaviour-neutral.
+// v55: the ring also stores every car's full Position (x, y, z) per
+// loop, so a tolerated miss can SNAP the replayed cars back to the
+// recorded positions and reset the divergence to ~0 (see
+// world_verify_debug_checksums). v is only a diagnostic sum of x+y
+// and cannot reconstruct x and y, so the position itself is stored.
+// 8192 entries x 14 cars x 12 bytes is ~1.3 MB on top of the ring;
+// the heap is ~1 GB, so this is acceptable.
+#define DIAG_CKPT_N 8192
+typedef struct {
+    int32_t  loop;
+    uint32_t seed;
+    uint16_t c;
+    int32_t  ncars;
+    int32_t  v[WORLD_MAX_CARS];
+    bVector3 pos[WORLD_MAX_CARS];
+} DiagCkpt;
+static DiagCkpt diagCkpt[DIAG_CKPT_N];
+
+// v51: set while a replay is running with a logged checksum miss (see
+// world_verify_debug_checksums); cleared whenever the world is not
+// replaying, so a new replay logs its first miss again. v56: the miss
+// is log-only in an instant replay, so this now means "already
+// diverged in this replay" rather than "already had a tolerated
+// miss"; later misses take the throttled path and keep playing.
+// v52: the largest maxdv logged as tolerated in this replay; a later
+// miss logs again only once maxdv has grown by 256 since the last
+// logged value, so the log shows the growth rate without spam.
+static int32_t diagReplayTolerated = 0;
+static int64_t diagReplayToleratedMax = 0;
+
+// v55: snap the replayed cars back to the positions the capture recorded
+// for this loop (rec->pos). The caller only calls this on a TOLERATED
+// miss, where the ring record is known valid for this loop (rec->loop ==
+// WorldLoopCounter and rec->ncars == n). The position is the AI's input
+// and the physics' state, so putting it back to the recorded value also
+// breaks the feedback loop that was amplifying the 1-ULP noise into a
+// growing divergence (the AI sees the recorded position and makes the
+// recorded decision, so the velocity converges back instead of drifting
+// further). GeometryPosition is derived from Position (carstate.c), so
+// it is recomputed from the snapped Position on the next update.
+static void diag_snap_positions(World *w, const DiagCkpt *rec, int32_t n)
+{
+    int32_t i;
+
+    for (i = 0; i < n; i++)
+        w->CarTable[i]->State.Position = rec->pos[i];
+}
+
 void world_verify_debug_checksums(World *w)
 {
     uint32_t c = world_calculate_debug_checksum(w);
     uint32_t b, e;
     ReplayManager *rm;
+    int32_t vi[WORLD_MAX_CARS];
+    int32_t nvi = 0;
+    int32_t i;
 
     if (Joylog_ReplayingFlag)
         (void)Joylog_GetData(16, 3);
@@ -597,7 +666,36 @@ void world_verify_debug_checksums(World *w)
 
     b = ((c >> 8) + c + (w->WorldRandomSeed & 0xffu)) & 0xffu;
     rm = pReplayManager;
+    // v51: the tolerated-miss flag is only meaningful while replaying;
+    // clear it on every non-replay step (live play and capture, before
+    // the capture branch below returns), so a new replay logs its first
+    // tolerated miss again.
+    if (!rm->ReplayingFlag) {
+        diagReplayTolerated = 0;
+        diagReplayToleratedMax = 0;
+    }
+    // v49: the per-car parts behind c, only while capturing or replaying
+    // (a plain race step pays nothing for them).
+    if (rm->CapturingFlag || rm->ReplayingFlag) {
+        nvi = w->TotalNumCars;
+        if (nvi > WORLD_MAX_CARS)
+            nvi = WORLD_MAX_CARS;
+        if (nvi < 0)
+            nvi = 0;
+        for (i = 0; i < nvi; i++)
+            vi[i] = car_calculate_debug_checksum(w->CarTable[i]);
+    }
     if (rm->CapturingFlag) {
+        DiagCkpt *rec =
+            &diagCkpt[(int32_t)((uint32_t)WorldLoopCounter % DIAG_CKPT_N)];
+        rec->loop = WorldLoopCounter;
+        rec->seed = w->WorldRandomSeed;
+        rec->c = (uint16_t)c;
+        rec->ncars = nvi;
+        for (i = 0; i < nvi; i++) {
+            rec->v[i] = vi[i];
+            rec->pos[i] = w->CarTable[i]->State.Position;
+        }
         ReplayManager_AddData(rm, (int32_t)b, 8, 2);
         return;
     }
@@ -609,9 +707,268 @@ void world_verify_debug_checksums(World *w)
     WorldVerifyMiss.checksum = c;
     WorldVerifyMiss.seed = w->WorldRandomSeed;
     WorldVerifyMiss.expected = e;
-    // Retail's (0x0014e300) marks the replay out of step first, through
-    // pReplayManager again: the pause menu and the post-race then leave it
-    // alone.
+    // DIAG (v48): the first miss of this replay only, drained so it is on
+    // the card even when the skip that follows ends the replay at once.
+    // v56: a miss in an INSTANT replay is now LOG-ONLY: it is logged
+    // (miss / missdetail / cardiff below) and the replay keeps
+    // playing -- OutOfStepFlag is never set and RC_SKIP_REPLAY is
+    // never posted here, so the replay plays to end_loop and waits
+    // on the playback screen. The two symptoms of the replay bug
+    // (the pause menu hiding Tekrari Izle, the replay ending early)
+    // were one cause: the abort. Demo replays are excluded: their
+    // misses are expected (the PS2's floats), and the demo post hook
+    // counts them itself; a demo miss still falls through to the
+    // abort below (retail behaviour). loop is the first loop the
+    // replayed world left the recorded path on; byte is the world's
+    // checksum at that loop, expected the recorded byte; logerr=1 means
+    // the log read itself failed and expected is not a recorded byte.
+    if (!rm->OutOfStepFlag
+        && !racecoordinator_is_replay_demo_mode(pRaceCoordinator)) {
+        char buf[160];
+        int m;
+        // v51/v52: tolerate float noise. The checksum byte is a hash of
+        // the world checksum c (car positions, WorldTimer, helicopter)
+        // and the seed's low byte, so ANY difference, however small,
+        // flips it. The ring's per-car v says how far the world really
+        // left the recorded path (1/65536 m of x+y). If the ring has
+        // this loop, the seed and car count match, and every car's |dv|
+        // is more than 0 but at most 1024 (15.6 mm), the replay is
+        // visually identical: keep playing instead of aborting.
+        // v51 used 64 (1 mm), but the v51 device session showed the
+        // noise GROWS: car 0 dv=2 at loop 4571, then dv=-60 and car 6
+        // dv=76 at loop 4620, 49 frames later (~1.5 units/frame, and
+        // it spreads to more cars). The snapshot is bit-exact and the
+        // timestep is recorded exactly, so the growth is the AI/physics
+        // feedback amplifying a 1-ULP difference, not a fixable source.
+        // 1024 covers ~600 frames at 1.5 units/frame (~900 units) with
+        // margin; 15.6 mm is invisible on screen (a car is ~4 m long),
+        // while a real event moves a car by centimetres to metres,
+        // thousands of units. A car-count change, a missing ring
+        // record, or a maxdv of 0 with c diverged (WorldTimer or
+        // helicopter, unmeasurable) still aborts as before. Demo
+        // replays never reach here (excluded above, retail behaviour).
+        // v54: a seed divergence NO LONGER aborts by itself. The v53
+        // device session proved the growth crosses an AI decision
+        // threshold: at loop 1982 the seeds differ (rec bf1bd6e2, rep
+        // fbb989b7) while the cars are only 352 and 96 units out
+        // (5.4 mm and 1.5 mm) -- the float noise made one AI draw
+        // differ, and the random stream desynced. The ring stores the
+        // seed the capture had at the START of this loop's step, and
+        // verify runs at the start of the step too, so putting
+        // w->WorldRandomSeed back to the recorded seed is exactly the
+        // seed for this step's draws: the stream is back in sync and
+        // the replay keeps playing. A seed divergence with maxdv over
+        // 1024 (a real event) still aborts as before.
+        // v55: a tolerated miss now also SNAPS the cars back to the
+        // recorded positions (diag_snap_positions, rec->pos) and
+        // re-syncs the seed as in v54, resetting the divergence to
+        // ~0. The v54 device session proved a fixed threshold cannot
+        // hold: the divergence GROWS (8 -> 264 in 74 frames, then
+        // 256 per ~7-9 frames, then past 1024) and ALWAYS exceeds any
+        // threshold on a long enough window -- the v54 session aborted
+        // at loop 3577 (car 3 dv=-1048) and at loop 3596 (car 1
+        // dv=-1304, after two seed resyncs) even though the seed
+        // re-sync worked. The snap is what stops the growth: the
+        // position is the AI's input, so the AI sees the recorded
+        // position and the feedback loop is broken. The snap happens
+        // on EVERY tolerated miss (the checksum byte flips on any
+        // divergence, so a miss follows within a frame of the snap),
+        // so the divergence can never accumulate to 1024: it is reset
+        // to ~0 at each miss and only regrows by the per-frame
+        // velocity difference (~50 units at most on the device, 20x
+        // below the threshold). A miss with maxdv over 1024, a
+        // missing ring record, a car-count change, or maxdv 0 with c
+        // diverged still aborts as before; the snap never runs on an
+        // aborted miss.
+        // v56: the snap does NOT reset the divergence, so the
+        // threshold approach is DEAD. The v55 device session proved
+        // it: session 1 (window 2868..3280) snapped at 2871 (maxdv
+        // 16), 2891 (320), 2893 (608), 2895 (896), then aborted at
+        // 2896 (car 2 dv=-1040) -- only 29/412 frames played; session
+        // 4 (window 5233..5561) snapped at 5339 (32), 5356 (384),
+        // 5359 (768), then aborted at 5362 (car 3 dv=-1056). The
+        // regrowth is ~144 units/frame in the last stretch (the v55
+        // host test's ~50/frame model was wrong). The divergence is
+        // in the VELOCITY and/or AI state, not just the position, so
+        // snapping positions alone cannot reset it. The fix is to
+        // stop aborting: in an instant replay the miss is LOG-ONLY.
+        // The replay is view-only (it cannot change the race result
+        // or the save) and the divergence is millimetres, so not
+        // aborting is safe; the snap + seed resync still run on
+        // every miss (when the ring has the loop) to keep the
+        // divergence small and the replay visually accurate. The
+        // 1024 threshold is kept only as a diagnostic number in the
+        // log lines, not as a gate. Demo replays still abort below.
+        int64_t maxdv = 0;
+        int rec_valid = 0;
+        int seed_mismatch = 0;
+        uint32_t seed_rec = 0;
+        uint32_t seed_rep = w->WorldRandomSeed;
+        DiagCkpt *rec = NULL;
+        {
+            rec = &diagCkpt[(int32_t)((uint32_t)WorldLoopCounter
+                                     % DIAG_CKPT_N)];
+            if (rec->loop == WorldLoopCounter
+                && rec->ncars == nvi && nvi > 0) {
+                int j;
+                rec_valid = 1;
+                for (j = 0; j < nvi && j < rec->ncars; j++) {
+                    int64_t dv = (int64_t)vi[j] - (int64_t)rec->v[j];
+                    if (dv < 0)
+                        dv = -dv;
+                    if (dv > maxdv)
+                        maxdv = dv;
+                }
+                seed_rec = rec->seed;
+                seed_mismatch = (rec->seed != w->WorldRandomSeed);
+            }
+        }
+        if (diagReplayTolerated) {
+            // v56: already diverged in this replay (the first miss is
+            // logged below): keep playing -- the abort is gone for
+            // instant replays (see the v56 note above). Snap the cars
+            // and re-sync the seed when the ring has this loop, so
+            // the divergence stays small; log again only once maxdv
+            // has grown by 256 since the last logged value, so the
+            // log shows the growth rate without spam.
+            if (rec_valid) {
+                // v54: the random stream may have desynced since the
+                // first miss; put it back in sync with the recorded
+                // seed (see above) so later frames draw as the
+                // capture did. Log it so the device log proves the
+                // resync.
+                if (seed_mismatch) {
+                    w->WorldRandomSeed = seed_rec;
+                    m = snprintf(buf, sizeof(buf),
+                        "DIAG replay: seed resync loop=%d seed_rec=%08x seed_rep=%08x\n",
+                        (int)WorldLoopCounter, (unsigned)seed_rec,
+                        (unsigned)seed_rep);
+                    if (m > 0)
+                        logwriter_put(buf, (size_t)m);
+                    logwriter_drain();
+                }
+                // v55: snap the cars back to the recorded positions
+                // (see above). This runs on every miss, so the
+                // divergence is reset each time.
+                diag_snap_positions(w, rec, nvi);
+            }
+            if (maxdv >= diagReplayToleratedMax + 256) {
+                m = snprintf(buf, sizeof(buf),
+                    "DIAG replay: miss tolerated loop=%d maxdv=%lld\n",
+                    (int)WorldLoopCounter, (long long)maxdv);
+                if (m > 0)
+                    logwriter_put(buf, (size_t)m);
+                if (rec_valid) {
+                    m = snprintf(buf, sizeof(buf),
+                        "DIAG replay: pos resync loop=%d maxdv=%lld\n",
+                        (int)WorldLoopCounter, (long long)maxdv);
+                    if (m > 0)
+                        logwriter_put(buf, (size_t)m);
+                }
+                logwriter_drain();
+                diagReplayToleratedMax = maxdv;
+            }
+            return;
+        }
+        m = snprintf(buf, sizeof(buf),
+            "DIAG replay: miss loop=%d cksum=%04x seed=%08x byte=%02x expected=%02x logerr=%d\n",
+            (int)WorldLoopCounter, (unsigned)c,
+            (unsigned)w->WorldRandomSeed, (unsigned)b, (unsigned)e,
+            (int)rm->RemoveDataError);
+        if (m > 0) {
+            logwriter_put(buf, (size_t)m);
+            logwriter_drain();
+        }
+        // DIAG (v49): which field diverged, against the capture's ring.
+        // seed_rec != seed_rep means the random stream left the recorded
+        // path (a draw the capture did not make, or the reverse); c_rec
+        // != c_rep with every v equal means WorldTimer or the helicopter;
+        // a cardiff line names the car whose position left it, and dv
+        // says by how much (1/65536 m of x+y: 1 is float noise, 65536
+        // is a metre). NOREC means the ring did not cover the loop.
+        {
+            /* v55: rec is the hoisted ring record from the tolerance
+               computation above (same loop, same slot); reuse it here
+               instead of looking the slot up a second time. */
+            if (rec == NULL || rec->loop != WorldLoopCounter) {
+                m = snprintf(buf, sizeof(buf),
+                    "DIAG replay: missdetail loop=%d NOREC\n",
+                    (int)WorldLoopCounter);
+                if (m > 0)
+                    logwriter_put(buf, (size_t)m);
+            } else {
+                m = snprintf(buf, sizeof(buf),
+                    "DIAG replay: missdetail loop=%d seed_rec=%08x seed_rep=%08x c_rec=%04x c_rep=%04x ncars_rec=%d ncars_rep=%d\n",
+                    (int)WorldLoopCounter, (unsigned)rec->seed,
+                    (unsigned)w->WorldRandomSeed, (unsigned)rec->c,
+                    (unsigned)c, (int)rec->ncars, (int)nvi);
+                if (m > 0)
+                    logwriter_put(buf, (size_t)m);
+                for (i = 0; i < nvi && i < rec->ncars; i++) {
+                    if (rec->v[i] != vi[i]) {
+                        int64_t dv = (int64_t)vi[i] - (int64_t)rec->v[i];
+                        m = snprintf(buf, sizeof(buf),
+                            "DIAG replay: cardiff loop=%d car=%d v_rec=%d v_rep=%d dv=%lld\n",
+                            (int)WorldLoopCounter, (int)i,
+                            (int)rec->v[i], (int)vi[i], (long long)dv);
+                        if (m > 0)
+                            logwriter_put(buf, (size_t)m);
+                    }
+                }
+            }
+            logwriter_drain();
+        }
+        // v56: log-only (see the v56 note above). This is the first
+        // miss of an instant replay: the miss is logged above, and
+        // the replay keeps playing -- no OutOfStepFlag, no
+        // RC_SKIP_REPLAY. Snap the cars and re-sync the seed when
+        // the ring has this loop (they keep the divergence small);
+        // the 1024 threshold no longer gates anything, because
+        // v51-v55 proved the feedback loop always grows past any
+        // fixed threshold (v55: 16 -> 320 -> 608 -> 896 -> -1040
+        // despite the snaps) and the divergence is millimetres on
+        // a view-only replay.
+        if (rec_valid) {
+            // v54: re-sync the random stream if it desynced (see the
+            // comment above). The miss and missdetail lines above
+            // already logged the divergence, so resync AFTER them,
+            // then keep playing.
+            if (seed_mismatch) {
+                w->WorldRandomSeed = seed_rec;
+                m = snprintf(buf, sizeof(buf),
+                    "DIAG replay: seed resync loop=%d seed_rec=%08x seed_rep=%08x\n",
+                    (int)WorldLoopCounter, (unsigned)seed_rec,
+                    (unsigned)seed_rep);
+                if (m > 0)
+                    logwriter_put(buf, (size_t)m);
+                logwriter_drain();
+            }
+            // v55: snap the cars back to the recorded positions (see
+            // the comment above), then keep playing. The snap is
+            // logged so the device log proves it fired.
+            diag_snap_positions(w, rec, nvi);
+            m = snprintf(buf, sizeof(buf),
+                "DIAG replay: pos resync loop=%d maxdv=%lld\n",
+                (int)WorldLoopCounter, (long long)maxdv);
+            if (m > 0)
+                logwriter_put(buf, (size_t)m);
+            logwriter_drain();
+        }
+        // The miss is logged, the replay keeps playing.
+        m = snprintf(buf, sizeof(buf),
+            "DIAG replay: miss tolerated loop=%d maxdv=%lld\n",
+            (int)WorldLoopCounter, (long long)maxdv);
+        if (m > 0)
+            logwriter_put(buf, (size_t)m);
+        logwriter_drain();
+        diagReplayTolerated = 1;
+        diagReplayToleratedMax = maxdv;
+        return;
+    }
+    // v56: only demo replays reach here (instant replays always return
+    // from the block above, log-only). Retail's (0x0014e300) marks the
+    // replay out of step first, through pReplayManager again: the pause
+    // menu and the post-race then leave it alone.
     pReplayManager->OutOfStepFlag = 1;
     if (gRaceCoordinatorPostMessageFn != NULL)
         gRaceCoordinatorPostMessageFn(pRaceCoordinator, RC_SKIP_REPLAY, 0);

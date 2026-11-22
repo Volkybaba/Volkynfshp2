@@ -4,10 +4,12 @@
 #include "racecoord.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "bmem.h"
 #include "bslotpool.h"
 #include "car.h"
+#include "logwriter.h"
 #include "carinit.h"
 #include "player.h"
 #include "playercam.h"
@@ -269,6 +271,8 @@ void racecoordinator_init_for_race(RaceCoordinator *rc)
 
 void racecoordinator_cleanup_after_race(RaceCoordinator *rc)
 {
+    /* DIAG v9: race-exit segfault yeri (logLine main.c'de static). */
+    logwriter_put("DIAG unload: cleanup_after_race\n", sizeof("DIAG unload: cleanup_after_race\n") - 1);
     if (rc->pPreRaceCameraCoordinator != NULL) {
         if (gCameraCoordinatorDeleteFn != NULL)
             gCameraCoordinatorDeleteFn(rc->pPreRaceCameraCoordinator);
@@ -314,6 +318,8 @@ void racecoordinator_cleanup_after_race(RaceCoordinator *rc)
             if (p != NULL) {
                 player_destroy(p, 3);
                 n = PlayerNumPlayers;
+            } else {
+                n--;
             }
         }
     }
@@ -321,18 +327,34 @@ void racecoordinator_cleanup_after_race(RaceCoordinator *rc)
 
 void racecoordinator_cleanup_players(RaceCoordinator *rc)
 {
+    /* DIAG v9: race-exit segfault yeri. */
+    logwriter_put("DIAG unload: cleanup_players\n", sizeof("DIAG unload: cleanup_players\n") - 1);
     int32_t i;
 
     (void)rc;
-    for (i = 0; i < PlayerNumPlayers; i++)
+    for (i = 0; i < PlayerNumPlayers; i++) {
+        if (PlayerPlayersByIndex[i] == NULL)
+            continue;
         player_cleanup_after_race(PlayerPlayersByIndex[i]);
+    }
 }
 
 void racecoordinator_cleanup_cars(RaceCoordinator *rc)
 {
+    /* DIAG v9: race-exit segfault yeri. */
+    {
+        char diagbuf[64];
+        int diagn = snprintf(diagbuf, sizeof diagbuf,
+                             "DIAG unload: cleanup_cars, world=%p\n",
+                             (void*)pCurrentWorld);
+        if (diagn > 0)
+            logwriter_put(diagbuf, (size_t)diagn);
+    }
     World *w = pCurrentWorld;
 
     (void)rc;
+    if (w == NULL)
+        return;
     while (w->CarList.next != (void *)&w->CarList) {
         Car *c = (Car *)w->CarList.next;
 

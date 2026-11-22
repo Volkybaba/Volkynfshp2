@@ -438,8 +438,9 @@ SedWedge *sedwedge_sound_instance(void)
     return gSoundSedWedge;
 }
 
-static const char *const kSpeechLanguages[6] = {
-    "English", "French", "German", "Italian", "Spanish", "English",
+static const char *const kSpeechLanguages[7] = {
+    "English", "English", "French", "German", "Italian", "Spanish",
+    "English",
 };
 
 void sedwedge_load_localized_speech_files(int32_t lang)
@@ -447,9 +448,11 @@ void sedwedge_load_localized_speech_files(int32_t lang)
     char hdr[64], dat[64], ban[64];
     const char *name;
 
-    if (!SoundEnabled || (uint32_t)lang >= 6)
+    if (!SoundEnabled || (uint32_t)lang >= 7)
         return;
     // A demo disc's is "DemoDisk" whatever the language.
+    // Indexed by the kLanguages list order (main.c): Turkish first, so
+    // Turkish and English both take the English speech, Swedish too.
     name = kSpeechLanguages[lang];
     snprintf(hdr, sizeof(hdr), "Sound\\Speech\\%sHDR.pck", name);
     snprintf(ban, sizeof(ban), "Sound\\Speech\\%sBAN.pck", name);

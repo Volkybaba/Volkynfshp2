@@ -2,6 +2,7 @@
 
 #include "resource.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "bchunk.h"
@@ -9,6 +10,7 @@
 #include "bfile.h"
 #include "bmem.h"
 #include "eview.h"
+#include "logwriter.h"
 #include "lzc.h"
 #include "queuedfile.h"
 
@@ -98,14 +100,23 @@ static ResourceFile *construct(ResourceFile *rf, const char *name,
         // the tracks' TRACKB<n>.LZC expanded (bfile.c), and what is read is
         // the bundle itself, kept for the race: not the top's, which on the
         // 3DS is the linear heap the track's textures go to (Session 109).
+        int32_t handle;
+
         allocate_memory(rf, (rf->Flags & RESOURCE_FILE_FLAG_LZCOMPRESSED)
                                 && !bFileIsExpanded(rf->Filename));
         rf->FileTransfersInProgress++;
-        change_queued_file_params(
-            add_queued_file(rf->pFirstChunk, rf->Filename, 0,
-                            rf->SizeofChunks, file_transfer_callback,
-                            (intptr_t)rf),
-            RF_PRIORITY, RF_BLOCK_SIZE);
+        handle = add_queued_file(rf->pFirstChunk, rf->Filename, 0,
+                                 rf->SizeofChunks, file_transfer_callback,
+                                 (intptr_t)rf);
+        if (handle < 0) {
+            // The file queue is full: nothing was queued, so the
+            // transfer can never finish. Drop the count again, and
+            // the resource loads empty (as a missing file does),
+            // instead of waiting forever. R36S v42.
+            rf->FileTransfersInProgress--;
+        } else {
+            change_queued_file_params(handle, RF_PRIORITY, RF_BLOCK_SIZE);
+        }
     }
     return rf;
 }
@@ -122,11 +133,44 @@ static void delete_file(ResourceFile *rf)
         HotChunkFilesNeedUpdating++;
     }
     if (rf->pFirstChunk != NULL) {
+        /* R36S v18 DIAG: v17 log proved the crash is after
+           unload_chunks returns and before "res deleted" — one of
+           bFree(pFirstChunk), post_load_fixup, bFree(rf). Step DIAGs
+           show which two lines the crash falls between. */
         unload_chunks(rf->pFirstChunk, rf->SizeofChunks);
+        logwriter_put("DIAG unload: delete_file after unload_chunks\n",
+                      sizeof("DIAG unload: delete_file after unload_chunks\n") - 1);
+        logwriter_put("DIAG unload: delete_file before bFree chunks\n",
+                      sizeof("DIAG unload: delete_file before bFree chunks\n") - 1);
         bFree(rf->pFirstChunk);
+        logwriter_put("DIAG unload: delete_file after bFree chunks\n",
+                      sizeof("DIAG unload: delete_file after bFree chunks\n") - 1);
         rf->pFirstChunk = NULL;
+        logwriter_put("DIAG unload: delete_file before fixup\n",
+                      sizeof("DIAG unload: delete_file before fixup\n") - 1);
+#ifdef NFSHP2_R36S
+        /* R36S v19: SKIP post_load_fixup on unload. v18 log proved the
+           race-exit segfault is inside post_load_fixup after
+           efix_up_tables returns, in el_update_textures or
+           afx_update_textures: both walk lists whose nodes point into
+           just-freed chunk memory (EmitterDataList nodes ARE in-chunk
+           AcidEmitterData; TexturePackList packs' TextureInfo arrays
+           ARE in-chunk; d->Texture dangles once the pack's file is
+           freed), and efix_up_tables itself is disabled on unload
+           ("fixup disabled, done"). The same re-resolution runs again
+           on the next load (load_if_transfer_finished, frontres.c,
+           trackview.c all call post_load_fixup after loading), so
+           skipping it here loses no work. Load path untouched. */
+        logwriter_put("DIAG unload: delete_file fixup skipped (unload)\n",
+                      sizeof("DIAG unload: delete_file fixup skipped (unload)\n") - 1);
+#else
         post_load_fixup();
+#endif
+        logwriter_put("DIAG unload: delete_file after fixup\n",
+                      sizeof("DIAG unload: delete_file after fixup\n") - 1);
     }
+    logwriter_put("DIAG unload: delete_file before bFree rf\n",
+                  sizeof("DIAG unload: delete_file before bFree rf\n") - 1);
     bFree(rf);
 }
 
@@ -135,6 +179,16 @@ static void load_if_transfer_finished(ResourceFile *rf)
 {
     if (rf->LoadingFinishedFlag || rf->FileTransfersInProgress != 0)
         return;
+    // R36S v43 DIAG: only car geometry files are traced (see resLoad).
+    if (strncmp(rf->Filename, "CARS", 4) == 0) {
+        char buf[128];
+        int n = snprintf(buf, sizeof buf,
+                         "DIAG load: transfer done %s chunks=%d\n",
+                         rf->Filename, (int)rf->SizeofChunks);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+        logwriter_drain();
+    }
     if (rf->Flags & RESOURCE_FILE_FLAG_LZCOMPRESSED) {
         uint8_t *packed = rf->pFirstChunk;
 
@@ -144,15 +198,46 @@ static void load_if_transfer_finished(ResourceFile *rf)
             rf->pFirstChunk = NULL;
             rf->SizeofChunks = (int32_t)bchunk_u32(packed + 8);
             if (rf->SizeofChunks != 0) {
+                // R36S v43 DIAG: LZC expand entry, drained (car files).
+                if (strncmp(rf->Filename, "CARS", 4) == 0) {
+                    char buf[128];
+                    int n = snprintf(buf, sizeof buf,
+                                     "DIAG load: lzc expand %s packed=%d expanded=%d\n",
+                                     rf->Filename, (int)packed_size,
+                                     (int)rf->SizeofChunks);
+                    if (n > 0)
+                        logwriter_put(buf, (size_t)n);
+                    logwriter_drain();
+                }
                 allocate_memory(rf, 0);
                 (void)lzc_decompress_into(packed, (size_t)packed_size, 0,
                                           rf->pFirstChunk,
                                           (size_t)rf->SizeofChunks, NULL);
+                if (strncmp(rf->Filename, "CARS", 4) == 0) {
+                    logwriter_put("DIAG load: lzc done\n",
+                                  sizeof("DIAG load: lzc done\n") - 1);
+                    logwriter_drain();
+                }
             }
             bFree(packed);
         }
     }
+    // R36S v43 DIAG: chunk walk entry/exit, drained (car files).
+    if (strncmp(rf->Filename, "CARS", 4) == 0) {
+        char buf[128];
+        int n = snprintf(buf, sizeof buf,
+                         "DIAG load: load_chunks %s size=%d\n",
+                         rf->Filename, (int)rf->SizeofChunks);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+        logwriter_drain();
+    }
     load_chunks(rf->pFirstChunk, rf->SizeofChunks);
+    if (strncmp(rf->Filename, "CARS", 4) == 0) {
+        logwriter_put("DIAG load: load_chunks done\n",
+                      sizeof("DIAG load: load_chunks done\n") - 1);
+        logwriter_drain();
+    }
     if (rf->Flags & RESOURCE_FILE_FLAG_FREE_AFTER_LOADING) {
         if (rf->pFirstChunk != NULL)
             bFree(rf->pFirstChunk);
@@ -190,6 +275,19 @@ ResourceFile *load_resource_file(const char *name, int32_t type,
     rf = construct((ResourceFile *)bMalloc((int)sizeof(ResourceFile),
                                            "ResourceFile", 0, 16),
                    name, type, flags, cb, param);
+    // R36S v43 DIAG: a car geometry file's load entry, drained. Gated
+    // to CARS\ so every other resource load (tracks, frontend) is
+    // untouched. If the fault is in the file open / queue, this is the
+    // last line; the matching "lzc"/"load_chunks" lines never come.
+    if (strncmp(name, "CARS", 4) == 0) {
+        char buf[128];
+        int n = snprintf(buf, sizeof buf,
+                         "DIAG load: resLoad %s size=%d\n",
+                         name, (int)rf->SizeofChunks);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+        logwriter_drain();
+    }
     last = ResourceFileList.prev;
     last->next = &rf->Node;
     ResourceFileList.prev = &rf->Node;
@@ -218,10 +316,20 @@ void change_filename_for_hot_chunking(ResourceFile *rf, const char *name)
 
 void unload_resource_file(ResourceFile *rf)
 {
+    /* DIAG v12: race-exit segfault adimi — hangi alt adimda cokuyor? */
+    char diagbuf[128];
+    int n = snprintf(diagbuf, sizeof(diagbuf),
+                     "DIAG unload: resUnload %s\n", rf->Filename);
+    if (n > 0)
+        logwriter_put(diagbuf, (size_t)n);
     while (!rf->LoadingFinishedFlag)
         service_resource_loading();
     unlink_file(rf);
+    logwriter_put("DIAG unload: res unlinked\n",
+                  sizeof("DIAG unload: res unlinked\n") - 1);
     delete_file(rf);
+    logwriter_put("DIAG unload: res deleted\n",
+                  sizeof("DIAG unload: res deleted\n") - 1);
 }
 
 int32_t service_resource_loading(void)

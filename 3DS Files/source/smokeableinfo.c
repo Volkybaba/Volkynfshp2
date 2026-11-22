@@ -4,6 +4,7 @@
 // can link it without the bodies.
 
 #include "smokeable.h"
+#include "logwriter.h"
 
 #include <stdint.h>
 
@@ -100,10 +101,21 @@ int smokeable_unloader(uint8_t *chunk)
 
         for (i = 0; i < n; i++) {
             bNode *node = (bNode *)(void *)(data + i * sizeof(SmokeableInfo));
-            bNode *next = node->next, *prev = node->prev;
-
-            prev->next = next;
-            next->prev = prev;
+            /* R36S v15: unlink only while the node is still in its list.
+               Same stale-pointer segfault as the solid list (v12): a node
+               already unlinked (its file, or a file sharing it, unloaded
+               first) writes through stale prev/next. */
+            if (node->prev == NULL || node->next == NULL) {
+                logwriter_put("DIAG unload: smokeable null node, skipped\n",
+                              sizeof("DIAG unload: smokeable null node, skipped\n") - 1);
+            } else if (node->prev->next == node
+                && node->next->prev == node) {
+                node->prev->next = node->next;
+                node->next->prev = node->prev;
+            } else {
+                logwriter_put("DIAG unload: smokeable already unlinked, skipped\n",
+                              sizeof("DIAG unload: smokeable already unlinked, skipped\n") - 1);
+            }
         }
         return 1;
     }

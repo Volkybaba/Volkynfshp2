@@ -10,6 +10,7 @@
 // docs/formats/polyhedra.md has the decode.
 
 #include "polyhedra.h"
+#include "logwriter.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -363,8 +364,21 @@ int unloader_collision_volumes(uint8_t *chunk)
         if (bchunk_u32(c) != CHUNK_COLLISION_VOLUME)
             continue;
         p = (VCPolyhedron *)(void *)payload16(c);
-        node(p->Link.prev)->next = p->Link.next;
-        node(p->Link.next)->prev = p->Link.prev;
+        /* R36S v15: unlink only while the node is still in its list.
+           Same stale-pointer segfault as the solid list (v12): a node
+           already unlinked (its file, or a file sharing it, unloaded
+           first) writes through stale prev/next. */
+        if (p->Link.prev == NULL || p->Link.next == NULL) {
+            logwriter_put("DIAG unload: collvol null node, skipped\n",
+                          sizeof("DIAG unload: collvol null node, skipped\n") - 1);
+        } else if (node(p->Link.prev)->next == p
+            && node(p->Link.next)->prev == p) {
+            node(p->Link.prev)->next = p->Link.next;
+            node(p->Link.next)->prev = p->Link.prev;
+        } else {
+            logwriter_put("DIAG unload: collvol already unlinked, skipped\n",
+                          sizeof("DIAG unload: collvol already unlinked, skipped\n") - 1);
+        }
         vcpoly_memory_image_unload(p);
     }
     return 1;

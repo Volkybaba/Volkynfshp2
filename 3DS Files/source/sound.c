@@ -1,6 +1,9 @@
 #include "sound.h"
 
+#include <stdio.h>
 #include <string.h>
+
+#include "logwriter.h"
 
 #include "bmath.h"
 #include "bticker.h"
@@ -125,9 +128,17 @@ static void load_region(SoundModule* m, const char* name)
     strcat(path, name);
     strcat(path, SOUND_EXT);
     exists = H && H->file_exists ? H->file_exists(H->ctx, path) : 1;
-    if (!exists)
+    if (!exists) {
+        /* R36S v14 DIAG: which region file_exists said is missing — if
+           this still fires after the sndFileExists fopen fix, the .SBK
+           genuinely is not on the card. */
+        char buf[80];
+        int n = snprintf(buf, sizeof buf,
+                         "DIAG sound: region %s missing, skipped\n", name);
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
         flash(m, 0, 0, 250, "Cannot Find Sound Region", 1.0f);
-    else if (bsound_load_region(m->bsound, name))
+    } else if (bsound_load_region(m->bsound, name))
         return;
     if (!(H && H->skip_missing))
         return;
@@ -148,6 +159,15 @@ void sound_driver_callback(uint32_t event, void* what, void* data)
     // Only a region's arrival; a sample's stop (8) and the rest pass by.
     if (event != BSOUND_REGION_LOADED)
         return;
+    /* R36S v13 DIAG: when each sound region actually arrives — the
+       20 s SFX delay theory is checked against these timestamps. */
+    {
+        char buf[80];
+        int n = snprintf(buf, sizeof buf, "DIAG sound: region %s loaded\n",
+                         bregion_name(r));
+        if (n > 0)
+            logwriter_put(buf, (size_t)n);
+    }
     if (r == bsound_common_region(m->bsound))
         m->commonLoaded = 1;
     for (i = 0; i < SOUND_REGIONS; i++)
@@ -309,10 +329,18 @@ static void poll_regions(SoundModule* m)
             H->joylog_add(H->ctx, ready, 1, 5);
     }
     if (20.0f < bGetTickerDifference(m->loadStart, bGetTicker()) * 0.001f) {
+        /* R36S v13 DIAG: the 20 s region-wait timeout — if the SFX
+           really start 20 s late, this line marks the moment. */
+        logwriter_put("DIAG sound: poll_regions timeout\n",
+                      sizeof("DIAG sound: poll_regions timeout\n") - 1);
         flash(m, 128, 84, 0, "Hang loading sound", 0.5f);
         ready = 1;
     }
     if (ready) {
+        /* R36S v13 DIAG: regions done loading (either complete or
+           forced by the timeout above). */
+        logwriter_put("DIAG sound: regions loaded\n",
+                      sizeof("DIAG sound: regions loaded\n") - 1);
         m->loading = 0;
         if (m->done != NULL) {
             m->done(m->doneParam);

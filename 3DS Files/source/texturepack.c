@@ -1,6 +1,7 @@
 // texturepack -- see texturepack.h.
 
 #include "texturepack.h"
+#include "logwriter.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -61,8 +62,21 @@ static void link_tail(bNode *list, bNode *n)
 
 static void list_unlink(bNode *n)
 {
-    n->prev->next = n->next;
-    n->next->prev = n->prev;
+    /* R36S v15: unlink only while the node is still in its list.
+       Same stale-pointer segfault as the solid list (v12): a node
+       already unlinked (its file, or a file sharing it, unloaded
+       first) writes through stale prev/next. */
+    if (n->prev == NULL || n->next == NULL) {
+        logwriter_put("DIAG unload: texpack null node, skipped\n",
+                      sizeof("DIAG unload: texpack null node, skipped\n") - 1);
+    } else if (n->prev->next == n
+        && n->next->prev == n) {
+        n->prev->next = n->next;
+        n->next->prev = n->prev;
+    } else {
+        logwriter_put("DIAG unload: texpack already unlinked, skipped\n",
+                      sizeof("DIAG unload: texpack already unlinked, skipped\n") - 1);
+    }
 }
 
 // ------------------------------------------------------------ the loader
@@ -256,9 +270,21 @@ void texturepack_attach_texture_table(TexturePack *p, TextureInfo *table,
 void texturepack_assign_texture_data(TexturePack *p, uint8_t *data,
                                      int32_t pos, int32_t size)
 {
+    // R36S v45 DIAG: assign entry, drained, FIRST line. If this
+    // line is present but "texassign done" is not, the fault is
+    // inside the assign loop below.
+    logwriter_put("DIAG load: texassign enter\n",
+                  sizeof("DIAG load: texassign enter\n") - 1);
+    logwriter_drain();
     int32_t end = add32(pos, size);
     int32_t i;
 
+    // R36S v44: a NULL buffer (a read that never filled, or a failed
+    // allocation) must not be stored into the texture table: data +
+    // offset would be a bogus low pointer, and the first upload of
+    // that texture would fault in the GL thread.
+    if (data == NULL)
+        return;
     for (i = 0; i < p->NumTextures; i++) {
         TextureInfo *t = &p->pTextureInfo[i];
 

@@ -38,7 +38,14 @@ static const char kPreRaceAnim[] = "GLOBAL\\PRERACEANIM.LZC";
 #define RC_MUSIC_NEVER 8999999488.0f
 
 // The delayed start the TICK gives the music once the race is RACING.
+// R36S: retail waits 6 s after GO; start at GO so the race is not silent.
+// v13: 0.0f never fires (sound_update only starts when delay goes below
+// 0, and 0 never goes below 0); 0.5f fires once, right after GO.
+#ifdef NFSHP2_R36S
+#define RC_MUSIC_DELAY 0.5f
+#else
 #define RC_MUSIC_DELAY 6.0f
+#endif
 
 // A Timer not yet set (`lui 0x7fff; ori 0xffff`), or 0.
 #define RC_TIMER_UNSET 0x7fffffff
@@ -524,14 +531,25 @@ void racecoordinator_request_unpause(RaceCoordinator *rc,
 void racecoordinator_resume_demo_cameras(RaceCoordinator *rc)
 {
     void *mem;
+    struct Car *car;
 
     if (rc->pDemoCameraCoordinator != NULL
         || gDemoCameraCoordinatorCtorFn == NULL)
         return;
+    /* Demo yarisi oyuncusuzdur; Player 1 AI arabasina baglidir. Eger
+       Player 1 ya da arabasi yoksa ilk AI arabasini kullan; o da yoksa
+       demo kamerasini kurma (NULL araba kamerayi cokertir). */
+    car = NULL;
+    if (PlayerPlayersByIndex[0] != NULL)
+        car = PlayerPlayersByIndex[0]->MyCar;
+    if (car == NULL && pCurrentWorld != NULL
+        && pCurrentWorld->CopCarPos > pCurrentWorld->AICarPos)
+        car = pCurrentWorld->CarTable[pCurrentWorld->AICarPos];
+    if (car == NULL)
+        return;
     mem = bMalloc(DEMO_CAMERA_COORDINATOR_SIZE, kRCFile, RC_DEMO_LINE,
                   RC_POOL);
-    rc->pDemoCameraCoordinator = gDemoCameraCoordinatorCtorFn(
-        mem, 1, PlayerPlayersByIndex[0]->MyCar);
+    rc->pDemoCameraCoordinator = gDemoCameraCoordinatorCtorFn(mem, 1, car);
 }
 
 void racecoordinator_suspend_demo_cameras(RaceCoordinator *rc)

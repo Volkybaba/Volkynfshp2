@@ -56,7 +56,6 @@
 #include "bchunk.h"
 #include "bchunkload.h"
 #include "beltmover.h"
-#include "bplist.h"
 #include "bganim.h"
 #include "bmath.h"
 #include "bmem.h"
@@ -312,10 +311,11 @@ static const u32 kDisplayTransferFlags =
 #define BUNDLE_DYNTEX   "GLOBAL/DYNTEX.BIN"
 
 static const char* const kLanguages[] = {
-    "LANGUAGES/FE_ENGLISH.BIN", "LANGUAGES/FE_FRENCH.BIN",
-    "LANGUAGES/FE_GERMAN.BIN",  "LANGUAGES/FE_ITALIAN.BIN",
-    "LANGUAGES/FE_SPANISH.BIN", "LANGUAGES/FE_SWEDISH.BIN",
-    "LANGUAGES/FE_LONGEST.BIN", "LANGUAGES/FE_ID.BIN",
+    "LANGUAGES/FE_TURKISH.BIN", "LANGUAGES/FE_ENGLISH.BIN",
+    "LANGUAGES/FE_FRENCH.BIN",  "LANGUAGES/FE_GERMAN.BIN",
+    "LANGUAGES/FE_ITALIAN.BIN", "LANGUAGES/FE_SPANISH.BIN",
+    "LANGUAGES/FE_SWEDISH.BIN", "LANGUAGES/FE_LONGEST.BIN",
+    "LANGUAGES/FE_ID.BIN",
 };
 #define NUM_LANGUAGES ((int)(sizeof(kLanguages) / sizeof(kLanguages[0])))
 
@@ -688,6 +688,17 @@ static void logOnAbort(int sig)
     logwriter_drain();
 }
 
+// R36S: same for a segfault — without this the async log writer dies with
+// the process and the last seconds of log lines are lost, so a crash in
+// the race-exit unload path leaves no trace. Drain first, then re-raise.
+static void logOnSegv(int sig)
+{
+    (void)sig;
+    logwriter_drain();
+    signal(SIGSEGV, SIG_DFL);
+    raise(SIGSEGV);
+}
+
 static void logOpen(void)
 {
     // Only when the config file says "DebugLog 1", or "GPULog 1" or
@@ -718,6 +729,7 @@ static void logOpen(void)
         logwriter_start(g_log);
         atexit(logwriter_stop);
         signal(SIGABRT, logOnAbort);
+        signal(SIGSEGV, logOnSegv);
     }
     // stderr is where bMalloc and the other fatal paths say why they abort,
     // just before they do; on the device it would otherwise go nowhere.
@@ -910,18 +922,28 @@ static uint32_t sndVBlank(void* c)
 
 // bFileExists("sound\\NAME.msh"): the card has NAME.SBK where the disc has
 // NAME.MSH and .MSB (tools/audio_pack.py).
+// R36S: test with fopen, not stat — stat() on sdmc:/ paths reports missing
+// files that exist (the memcard CHECK proved it: stat=-1, fopen OK on the
+// same path), so every region looked missing, skip_missing marked it
+// "loaded" without loading it, and no in-game sample (countdown beep,
+// engine, tyres) could ever play. fopen is the same fix the save check
+// already uses.
 static int sndFileExists(void* c, const char* path)
 {
     char        file[GAMEDATA_MAX_PATH + 40];
     const char* name = strrchr(path, '\\');
     const char* dot;
-    struct stat st;
+    FILE* f;
     (void)c;
     name = name ? name + 1 : path;
     dot = strrchr(name, '.');
     snprintf(file, sizeof(file), "%s/%.*s.SBK", gSoundDir,
              (int)(dot ? dot - name : (ptrdiff_t)strlen(name)), name);
-    return stat(file, &st) == 0;
+    f = fopen(file, "rb");
+    if (f == NULL)
+        return 0;
+    fclose(f);
+    return 1;
 }
 
 // eFlashScreen's colour is a debug build's cue; the log says why.
@@ -1398,6 +1420,35 @@ static int32_t replayToggleHelp(const int32_t* lines, int32_t value)
     if (value == 1)
         helpmenu_toggle(&g_help, lines);
     return helpmenu_is_active(&g_help);
+}
+
+// v53: whether the replay's bottom panel (kReplayNote) shows. Retail
+// shows the note the whole replay on the 3DS's own bottom screen; on
+// the R36S's one screen it covers the race, so it stays down until the
+// replay's Help asks for it. The Turkish strings stay in the binary
+// and are shown on demand via Help.
+static int32_t replayPanelUp(void)
+{
+    return pRaceCoordinator != NULL
+        && pRaceCoordinator->pReplayScreen != NULL
+        && replayHelpActive();
+}
+
+// v57: whether the Controller page's bottom panel (CONTROLS_BLURB) shows.
+// The same pattern as the replay's panel (v53): retail shows the note the
+// whole time the page is up on the 3DS's own bottom screen; on the R36S's
+// one screen it covers the controls list, so it stays down until the
+// page's Help asks for it (Y summons the HELP panel -- the page's lines
+// are in kScreenLines, helpmenu.c -- which makes helpmenu_is_active
+// answer). While a key is being rebound the panel is the wait prompt
+// ("$NAME icin yeni tusa bas. START iptal eder."), so it stays up then
+// even though Help is not active. The Turkish text stays in the binary
+// and is shown on demand via Help.
+static int32_t joyconfigPanelUp(void)
+{
+    return g_flow.screen != NULL
+        && g_flow.screen->callback == joyconfig_callback
+        && (helpmenu_is_active(&g_help) || joyconfig_is_waiting());
 }
 
 // SelectCarCameraMover's four (selcam.h): each a new bSample copied from
@@ -2007,6 +2058,7 @@ static int sdLoad(SdCard* c)
     long  got;
     if (!sdPath(c, path, sizeof(path))) return BMC_ERROR;
     f = fopen(path, "rb");
+    logLine("DIAG save: load %s f=%p", path, (void*)f);
     if (!f) return BMC_FILE_NOT_FOUND;
     got = c->data && c->size > 0 ? (long)fread(c->data, 1, (size_t)c->size, f)
                                  : 0;
@@ -2029,6 +2081,7 @@ static int sdSave(SdCard* c)
     mkdir("sdmc:/NFSHP2", 0777);
     mkdir(SAVES_DIR, 0777);
     f = fopen(path, "wb");
+    logLine("DIAG save: save %s f=%p", path, (void*)f);
     if (!f) return BMC_ERROR;
     put = (long)fwrite(c->data, 1, (size_t)c->size, f);
     if (fclose(f) != 0 || put != c->size) {
@@ -2046,7 +2099,6 @@ static void sdService(BMemcardFileSys* fs, int port, int slot)
 {
     SdCard*      c = (SdCard*)fs;
     BMemcardDone done;
-    struct stat  st;
     char         path[96];
     (void)port;
     (void)slot;
@@ -2059,10 +2111,22 @@ static void sdService(BMemcardFileSys* fs, int port, int slot)
             fs->lastError = sdSave(c);
             break;
         case BMC_FS_CHECK_EXISTENCE:
-            fs->lastError = sdPath(c, path, sizeof(path))
-                                    && stat(path, &st) == 0
-                                ? BMC_OK
-                                : BMC_FILE_NOT_FOUND;
+            /* R36S v12: stat() on this path returns -1 even when the
+               file exists (v11 DIAG: stat=-1, fopen valid) — test
+               existence with fopen instead. */
+            if (sdPath(c, path, sizeof(path))) {
+                FILE *t = fopen(path, "rb");
+                if (t != NULL) {
+                    fclose(t);
+                    fs->lastError = BMC_OK;
+                } else {
+                    fs->lastError = BMC_FILE_NOT_FOUND;
+                }
+            } else {
+                fs->lastError = BMC_FILE_NOT_FOUND;
+            }
+            logLine("DIAG save: check %s %s", path,
+                    fs->lastError == BMC_OK ? "found" : "missing");
             // What the saver reads to ask before overwriting (+1460).
             fs->fileExists = fs->lastError == BMC_OK;
             break;
@@ -3712,6 +3776,14 @@ static void hookSetPolice(void* user, int copsOn)
 {
     (void)user;
     Fred.MainMenuOpts[1] = copsOn;
+}
+
+// R36S: NewMainMenu's "Oyundan Cik" (Exit Game). Asks the host to leave
+// the main loop, so the game shuts down cleanly, as on Select+Start.
+static void hookRequestQuit(void* user)
+{
+    (void)user;
+    r36s_request_quit();
 }
 
 // ---------------------------------------------------------------- 3DS glue
@@ -6955,8 +7027,8 @@ static const char kPlainScreenNote[] =
 // screen. 0x80 is START's glyph and 0x89 Circle's, Y in the replay's
 // scanners layout (helpglyph.h).
 static const char kReplayNote[] =
-    "Press START to leave the replay and go back to the menu.";
-static const char kReplayHint[] = "\x80 Back to menu    \x89 Help";
+    "Tekrari birakip menuye donmek icin START'a bas.";
+static const char kReplayHint[] = "\x80 Menuye don    \x89 Yardim";
 
 // The line the top screen would be drawing this frame. It is read out of
 // the object rather than remembered from the setBlurb hook because the hook
@@ -7791,10 +7863,6 @@ static int flowInput(u32 kDown, u32 kUp, int port)
     // HELP panel with the override's lines or the screen's, or sends it
     // away. While it is coming in or there, the popups, the screen and its
     // menu hear nothing.
-    if (helpmenu_is_active(&g_help) && (kDown & (KEY_Y | KEY_B | KEY_START))) {
-        helpmenu_dismiss(&g_help);
-        return 1;
-    }
     if ((listDown & KEY_Y) && !(g_boot.hasMenu && g_boot.menu.ignoreJoystick)
         && !bpopup_any_active(&g_flow) && takes) {
         helpmenu_toggle(&g_help,
@@ -8108,10 +8176,6 @@ int main(int argc, char** argv)
     // before anything can call bNewSlotPool. Its allocator hook is left at
     // the default, malloc -- i.e. the heap heapcfg.c already sized.
     sinit_run();
-    // The bPNode pool (smokeable, skids, munitions, endgame) started at 32
-    // nodes and grew by 9 each time a race ran out, with a warning and a
-    // new block. Retail's InitializeEverything sets it to 2048 (bplist.h).
-    bplist_init(2048);
     // Retail's list has one more the demo's does not: [99], 0x0024fa60,
     // TheEasterEggs' constructor.
     eastereggs_construct(&TheEasterEggs);
@@ -8750,6 +8814,10 @@ int main(int argc, char** argv)
     InitJoystick();
 
     logPrintf("NFSHP2-3DS -- boot flow\n");
+    // R36S v43: version marker, in both logs (log.txt and
+    // nfshp2_debug.txt), so a device log proves which binary ran.
+    // R36S v50: marker bumped.
+    logPrintf("NFSHP2 v59\n");
     logPrintf("Heap: asked=%luKB got=%luKB linear=%luKB\n",
               (unsigned long)(g_heapInfo.heapAsked / 1024),
               (unsigned long)(g_heapInfo.heapGot / 1024),
@@ -8801,7 +8869,6 @@ int main(int argc, char** argv)
         printf("\nNo game data found.\n");
         printf("Put the extracted disc on the SD card at\n");
         printf("  sdmc:/3ds/NFSHP2-3DS/data\n");
-        printf("or name the directory in %s.\n", GAMEDATA_CONFIG);
         printf("It must contain %s.\n", GAMEDATA_SENTINEL);
         waitForExit();
         gfxExit();
@@ -8836,11 +8903,13 @@ int main(int argc, char** argv)
     sound_initialize_driver(&gSoundModule);
     fesound_init_global();
     if (soundUp) {
-        logPrintf("Sound: %u patches in %u voices, common %s\n",
+        logPrintf("Sound: %u patches in %u voices, common %s (device %s)\n",
                   (unsigned)gSnd.patchCount, gSnd.voices,
-                  gSoundModule.commonLoaded ? "in" : "missing");
+                  gSoundModule.commonLoaded ? "in" : "missing",
+                  ndsp_device_name());
     } else {
-        logPrintf("Sound: ndsp unavailable, running silent\n");
+        logPrintf("Sound: ndsp unavailable (%s), running silent\n",
+                  ndsp_last_error());
     }
     logPrintf("Jukebox: %s, %u tunes\n",
               jb_is_cartridge_loaded(&g_jukebox.jukebox) ? "loaded" : "none",
@@ -8951,6 +9020,7 @@ int main(int argc, char** argv)
     hooks.unInitFrontendSounds = hookUnInitFrontendSounds;
     hooks.unloadSoundRegions   = hookUnloadSoundRegions;
     hooks.setPolice        = hookSetPolice;
+    hooks.requestQuit      = hookRequestQuit;
     hooks.unloadFrontEnd   = hookUnloadFrontEnd;
     hooks.moveBrackets     = hookMoveBrackets;   // NewMainMenu's highlight
     hooks.setBlurb         = hookSetBlurb;
@@ -8963,11 +9033,6 @@ int main(int argc, char** argv)
 
     bgf_init(&g_flow, kGameFlowStages, BGF_NUM_STATES,
              kScreens, NUM_SCREENS, kBootStages, NUM_BOOT_STAGES, &hooks);
-    // PAL or NTSC by the disc the files came from, as InitDisplaySystem
-    // (0x00100750) decides it: the language screen at every start and the
-    // Options' Languages item are PAL's only (gamedata.h).
-    g_flow.videoMode = gamedata_video_mode();
-    logLine("video mode %s", g_flow.videoMode ? "NTSC" : "PAL");
     // FlailerScreenList's constructor makes its song monitor (0x0016c25c).
     bsm_init(&g_songMonitor, &kSongMonitorHooks);
     // And its background animation (0x0016c36c), bMalloc(156).
@@ -9852,7 +9917,7 @@ int main(int argc, char** argv)
             // the players' events, below.
             // Options' Controller page has its keys first: X, and every
             // key while it waits for one (joyconfig.h).
-            if (!raceUp && !helpmenu_is_active(&g_help)) {
+            if (!raceUp) {
                 u32 took = joyconfig_input(kDown);
                 if (took) redraw = 1;
                 menuDown &= ~took;
@@ -10153,26 +10218,15 @@ int main(int argc, char** argv)
             // the bottom screen still says is the port's own -- the
             // controller setup, the replay's keys, the debug menus -- and
             // the R36S shows it as a panel over the screen only on those.
-            // On the controller page the panel would cover the lower rows,
-            // so it shows as retail's HELP panel does, on the help key, and
-            // while the page waits for a new key, which it names
-            // (joyconfig_panel_wanted). NFSHP2_CONFIG_PANEL=1 keeps it up.
-            {
-                static int cfgKeep = -1;
-                bool       cfgPanel;
-
-                if (cfgKeep < 0) {
-                    const char* e = getenv("NFSHP2_CONFIG_PANEL");
-                    cfgKeep = e != NULL && e[0] == '1';
-                }
-                cfgPanel = g_flow.screen
-                    && g_flow.screen->callback == joyconfig_callback
-                    && (cfgKeep || joyconfig_panel_wanted());
-                r36s_bottom_popup(replayUp || cfgPanel
-                    || (g_flow.screen
-                        && (g_flow.screen->callback == debugmenu_callback
-                            || g_flow.screen->callback == debugmenu_race_callback)));
-            }
+            // The replay's and the Controller page's panels stay down
+            // until their Help asks for them (v53, v57); the debug menus'
+            // one-line hint stays up -- they are the developer's tool, not
+            // a game screen, and the hint is how it is operated.
+            r36s_bottom_popup(replayPanelUp()
+                || joyconfigPanelUp()
+                || (g_flow.screen
+                    && (g_flow.screen->callback == debugmenu_callback
+                        || g_flow.screen->callback == debugmenu_race_callback)));
             if (false) {
 #else
             if (!racePaused && !replayUp

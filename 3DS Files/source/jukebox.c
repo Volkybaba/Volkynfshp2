@@ -610,6 +610,17 @@ static const float kDefaultVolume[7] = {
     0.38f, 0.55f, 0.33f, 0.31f, 0.85f, 0.45f, 0.75f,
 };
 
+// R36S: a saved 0.0 volume is never a real choice (there is a separate
+// mute); it is a stale zero left by the speech-ducking feedback loop,
+// which stores the ducked live level as the new base. The loop drives the
+// value down in steps (0.38 -> 0.11 -> 0.03 -> 0.01), so a tiny positive
+// value is the same artifact. Use the default instead so a saved near-zero
+// can never silence a category for good.
+static float vol_or_default(uint32_t cat, float v)
+{
+    return v >= 0.05f ? v : kDefaultVolume[cat < 7 ? cat : 0];
+}
+
 // 0x001afab8, the end of InitializeSoundDriver and the audio options'
 // Default. A demo disc's launcher scaled these by the volume it passed
 // (TheDemoDiscManager, 0x002effe0 +36, in tenths); the retail disc runs
@@ -881,13 +892,18 @@ static float rdf(const uint8_t* b)
 void jb_audio_from_sound(JBSound* s, uint8_t* ao, int tunes, int audioMode)
 {
     JBPlayer* p = &s->jukebox;
-    wrf(ao + JB_AO_MENU_MUSIC, jb_get_category_volume(s, 5));
-    wrf(ao + JB_AO_RACING_MUSIC, jb_get_category_volume(s, 4));
-    wrf(ao + JB_AO_SFX, jb_get_category_volume(s, 0));
-    wrf(ao + JB_AO_SPEECH, jb_get_category_volume(s, 6));
-    wrf(ao + JB_AO_SFX_ENGINE, jb_get_category_volume(s, 2));
+    /* R36S: write the saved base volumes, not the live ones — the live
+       level is ducked while speech plays (0.3x in the menus), and writing
+       it to Fred made the ducked value the new base, driving a category
+       to silence over time. Cat 3 (menu SFX) has no saved base and is
+       never ducked, so the live value is correct for it. */
+    wrf(ao + JB_AO_MENU_MUSIC, jb_saved_volume(s, 5));
+    wrf(ao + JB_AO_RACING_MUSIC, jb_saved_volume(s, 4));
+    wrf(ao + JB_AO_SFX, jb_saved_volume(s, 0));
+    wrf(ao + JB_AO_SPEECH, s->savedSpeechVolume);
+    wrf(ao + JB_AO_SFX_ENGINE, jb_saved_volume(s, 2));
     wrf(ao + JB_AO_SFX_MENU, jb_get_category_volume(s, 3));
-    wrf(ao + JB_AO_SFX_TIRES, jb_get_category_volume(s, 1));
+    wrf(ao + JB_AO_SFX_TIRES, jb_saved_volume(s, 1));
     if (tunes) {
         wr32(ao + JB_AO_NUM_TUNES, 0);
         for (uint32_t c = 0; c < p->numCategories; c++) {
@@ -970,13 +986,13 @@ void jb_audio_default_jukebox(JBSound* s, uint8_t* ao)
 
 int jb_audio_apply(JBSound* s, const uint8_t* ao)
 {
-    jb_set_category_volume(s, 5, rdf(ao + JB_AO_MENU_MUSIC));
-    jb_set_category_volume(s, 4, rdf(ao + JB_AO_RACING_MUSIC));
-    jb_set_category_volume(s, 0, rdf(ao + JB_AO_SFX));
-    jb_set_category_volume(s, 6, rdf(ao + JB_AO_SPEECH));
-    jb_set_category_volume(s, 2, rdf(ao + JB_AO_SFX_ENGINE));
-    jb_set_category_volume(s, 3, rdf(ao + JB_AO_SFX_MENU));
-    jb_set_category_volume(s, 1, rdf(ao + JB_AO_SFX_TIRES));
+    jb_set_category_volume(s, 5, vol_or_default(5, rdf(ao + JB_AO_MENU_MUSIC)));
+    jb_set_category_volume(s, 4, vol_or_default(4, rdf(ao + JB_AO_RACING_MUSIC)));
+    jb_set_category_volume(s, 0, vol_or_default(0, rdf(ao + JB_AO_SFX)));
+    jb_set_category_volume(s, 6, vol_or_default(6, rdf(ao + JB_AO_SPEECH)));
+    jb_set_category_volume(s, 2, vol_or_default(2, rdf(ao + JB_AO_SFX_ENGINE)));
+    jb_set_category_volume(s, 3, vol_or_default(3, rdf(ao + JB_AO_SFX_MENU)));
+    jb_set_category_volume(s, 1, vol_or_default(1, rdf(ao + JB_AO_SFX_TIRES)));
     jb_save_volumes_for_speech(s);
     jb_music_set_selection(s, ao, 5);
     return (int16_t)(ao[JB_AO_AUDIO_MODE] | ao[JB_AO_AUDIO_MODE + 1] << 8);

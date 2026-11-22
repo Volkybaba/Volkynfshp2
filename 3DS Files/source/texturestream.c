@@ -11,6 +11,7 @@
 #include "bmem.h"
 #include "esolid.h"
 #include "eview.h"
+#include "logwriter.h"
 #include "queuedfile.h"
 
 // The most of a pack's file LoadTextureTableFromFile reads: its header
@@ -203,6 +204,11 @@ void texturepack_add_loaded_texture_data(TexturePack *p, int32_t pos,
     LoadedTextureData *d, *m;
     int32_t end = add32(pos, size);
 
+    // R36S v44: a non-positive size is not a range. A negative size
+    // would make an inverted range (HighPos < LowPos); the service
+    // walk would then bMalloc a negative size and queue a bad read.
+    if (size <= 0)
+        return;
     d = texturepack_find_loaded_texture_data(p, pos, size);
     if (d != NULL) {
         d->NumAssignments++;
@@ -274,10 +280,13 @@ void texturepack_delete_loaded_texture_data(TexturePack *p,
 
 void texturepack_load_texture_from_file(TexturePack *p, TextureInfo *t)
 {
-    if (t->ImageSize != 0)
+    // R36S v44: sizes are byte counts, never negative. A corrupt
+    // (negative) size would make an inverted range (HighPos < LowPos)
+    // in texturepack_add_loaded_texture_data, which breaks the loader.
+    if (t->ImageSize > 0)
         texturepack_add_loaded_texture_data(p, t->ImagePlacement,
                                             t->ImageSize);
-    if (t->PaletteSize != 0)
+    if (t->PaletteSize > 0)
         texturepack_add_loaded_texture_data(p, t->PalettePlacement,
                                             t->PaletteSize);
 }
@@ -298,6 +307,15 @@ void texturepack_load_textures_from_file(TexturePack *p, uint32_t *hashes,
 {
     LoadedTextureData *d;
 
+    // R36S v43 DIAG: the skin-texture load's entry, drained.
+    {
+        char buf[128];
+        int m = snprintf(buf, sizeof buf,
+                         "DIAG load: texload n=%d\n", n);
+        if (m > 0)
+            logwriter_put(buf, (size_t)m);
+        logwriter_drain();
+    }
     for (; n > 0; n--, hashes++) {
         TextureInfo *t = *hashes != 0 ? texturepack_get_texture(p, *hashes)
                                       : NULL;
@@ -370,11 +388,35 @@ void texturepack_service_loading_textures(TexturePack *p)
             texturepack_service_loading_textures(p);
             return;
         }
+        if (d->HighPos < d->LowPos) {
+            // R36S v44: an inverted range (a corrupt size slipped
+            // through): it can never be read. Drop it instead of
+            // bMalloc'ing a negative size and queueing a bad read.
+            list_unlink(n);
+            p->NumNotYetLoadedTextureDatas--;
+            loadedtexturedata_destruct(d, 3);
+            texturepack_service_loading_textures(p);
+            return;
+        }
         d->LoadingInProgress = 1;
         p->CurrentLoadingTextureData = d;
         p->NumNotYetLoadedTextureDatas--;
         d->Buf = (uint8_t *)bMalloc(sub32(d->HighPos, d->LowPos),
                                     "LoadedTextureData", 0, d->MemoryPool);
+        // R36S v45 DIAG: a texture file read is dequeued, drained.
+        // If this line is on the card but "texcb enter" is not, the
+        // fault is in the queued read (begin_read / async read /
+        // service) or in the callback invocation.
+        {
+            char buf[192];
+            int m = snprintf(buf, sizeof buf,
+                             "DIAG load: texsvc file %.63s pos=%d size=%d\n",
+                             p->Filename, d->LowPos,
+                             sub32(d->HighPos, d->LowPos));
+            if (m > 0)
+                logwriter_put(buf, (size_t)m);
+            logwriter_drain();
+        }
         add_queued_file(d->Buf, p->Filename,
                         add32(p->TextureDataFilePos, d->LowPos),
                         sub32(d->HighPos, d->LowPos), read_callback,
@@ -385,18 +427,53 @@ void texturepack_service_loading_textures(TexturePack *p)
 
 void texturepack_read_callback(TexturePack *p, int32_t error)
 {
+    // R36S v45 DIAG: callback entry, drained, FIRST line. The v44
+    // step lines never appeared for MUSTANGCOP, so the fault is
+    // either before this callback fires or inside it. If this line
+    // is on the card, the callback fires; if not, it never fires
+    // and the fault is in the queued read / service.
+    logwriter_put("DIAG load: texcb enter\n",
+                  sizeof("DIAG load: texcb enter\n") - 1);
+    logwriter_drain();
     LoadedTextureData *d = p->CurrentLoadingTextureData;
 
     (void)error;
+    // R36S v43 DIAG: a texture chunk finished reading. Logged but NOT
+    // drained: this fires per texture chunk (also while racing), and a
+    // drain on every one would stall texture streaming. The drained
+    // stage lines ("begin skins" / "stage done") bracket this stage.
+    // R36S v44 DIAG: the MUSTANGCOP crash is in this callback (after
+    // "texload n=13", before any durable line), so the steps below are
+    // drained: whichever is last on the card is where it faults.
+    logwriter_put("DIAG load: texread\n",
+                  sizeof("DIAG load: texread\n") - 1);
     p->CurrentLoadingTextureData = NULL;
+    if (d == NULL) {
+        // No texture load is in progress: the callback fired with
+        // nothing to finish. R36S v42: this used to dereference the
+        // NULL data and fault.
+        return;
+    }
     texturepack_assign_texture_data(p, d->Buf, d->LowPos,
                                     sub32(d->HighPos, d->LowPos));
+    logwriter_put("DIAG load: texassign done\n",
+                  sizeof("DIAG load: texassign done\n") - 1);
+    logwriter_drain();
     d->LoadingInProgress = 0;
     d->LoadingCompleted = 1;
+    logwriter_put("DIAG load: texfix enter\n",
+                  sizeof("DIAG load: texfix enter\n") - 1);
+    logwriter_drain();
     efix_up_tables();
+    logwriter_put("DIAG load: texfix done\n",
+                  sizeof("DIAG load: texfix done\n") - 1);
+    logwriter_drain();
     if (d->NumAssignments == 0)
         texturepack_delete_loaded_texture_data(p, d);
     texturepack_service_loading_textures(p);
+    logwriter_put("DIAG load: texread done\n",
+                  sizeof("DIAG load: texread done\n") - 1);
+    logwriter_drain();
 }
 
 void texturepack_unload_all_textures_from_file(TexturePack *p)

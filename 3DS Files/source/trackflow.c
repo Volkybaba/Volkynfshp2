@@ -8,6 +8,7 @@
 #include "bchunk.h"
 #include "bslotpool.h"
 #include "car.h"
+#include "logwriter.h"
 #include "carloader.h"
 #include "cartypeinfo.h"
 #include "collision.h"
@@ -395,6 +396,8 @@ void EndGameFlowLoadingTrackSpecific(void)
 
 void BeginGameFlowUnloadingTrackSpecific(void)
 {
+    /* DIAG v9: race-exit segfault yeri. */
+    logwriter_put("DIAG unload: BeginGameFlowUnloadingTrackSpecific\n", sizeof("DIAG unload: BeginGameFlowUnloadingTrackSpecific\n") - 1);
     void *file;
 
     eDisableFixUpTables = 1;
@@ -469,14 +472,26 @@ void BeginGameFlowUnloadingTrackSpecific(void)
 
 void BeginGameFlowUnloadingTrackCommon(void)
 {
+    /* DIAG v9: race-exit segfault yeri. */
+    logwriter_put("DIAG unload: BeginGameFlowUnloadingTrackCommon\n", sizeof("DIAG unload: BeginGameFlowUnloadingTrackCommon\n") - 1);
     void *file;
 
     while (gFindResourceFileFn != NULL && gUnloadResourceFileFn != NULL
-           && (file = gFindResourceFileFn(RESOURCE_FILE_INGAME)) != NULL)
+           && (file = gFindResourceFileFn(RESOURCE_FILE_INGAME)) != NULL) {
+        /* DIAG v11: hangi dosyada cokuyor / dongu sonsuz mu? */
+        char diagbuf[64];
+        int n = snprintf(diagbuf, sizeof(diagbuf), "DIAG unload: common loop file=%p\n", file);
+        if (n > 0) logwriter_put(diagbuf, (size_t)n);
         gUnloadResourceFileFn(file);
+    }
+    logwriter_put("DIAG unload: common resource files done\n", sizeof("DIAG unload: common resource files done\n") - 1);
     CALL(gEDeleteAllDuplicatedSolidsFn);
+    logwriter_put("DIAG unload: common DeleteAllDuplicatedSolids done\n", sizeof("DIAG unload: common DeleteAllDuplicatedSolids done\n") - 1);
     carloader_unload_everything(&TheCarLoader);
+    logwriter_put("DIAG unload: common carloader done\n", sizeof("DIAG unload: common carloader done\n") - 1);
     check_for_leak(FreeMemoryBeforeLoadingTrackCommon,
                    "Memory Leak - Track Common");
+    logwriter_put("DIAG unload: common leak check done\n", sizeof("DIAG unload: common leak check done\n") - 1);
+    logwriter_put("DIAG unload: common -> LOADING_FRONTEND\n", sizeof("DIAG unload: common -> LOADING_FRONTEND\n") - 1);
     change_game_flow(BGF_LOADING_FRONTEND);
 }
