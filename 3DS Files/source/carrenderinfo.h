@@ -513,13 +513,4 @@ void render_cars(eView *view);
 void render_cars_keep_angles(void);
 void render_cars_restore_angles(void);
 
-#ifdef NFSHP2_R36S
-// The R36S's mirror can skip frames (NFSHP2_MIRROR_EVERY): then this leaves
-// the angles the mirror's render_cars would, for the same cars, and notes
-// them as it would, without drawing anything. Otherwise the trackers read
-// the mirror's angles one frame and the player's view's the next, and
-// flashed.
-void render_cars_angles_only(eView *view);
-#endif
-
 #endif

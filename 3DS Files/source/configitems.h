@@ -65,32 +65,42 @@ extern int32_t ForceAllAICarsToBeThisType;  // gp-23116, -1
 extern int32_t MaximumNumAICars;            // gp-23112, 7
 extern int32_t TunePreRaceSequence;         // gp-23108, 0
 
-// The port's own word, not retail's: "DebugLog 1" has main.c write
+// The port's own word, not retail's: "DebugLog=1" has main.c write
 // sdmc:/nfshp2_debug.txt. Off by default: on 2026-10-11 the console's
 // SD driver (Process9) crashed twice as the log went to the card in a
 // race (logwriter.h).
 extern int32_t ConfigDebugLog;              // 0
 
+// The port's own string, not retail's: "PlayerName=<name>" in the config
+// file sets Player 1's name (at most 11 characters, a-z A-Z 0-9 ! . #
+// space — the Player Names screen's own filter, nameentry_char_ok; anything
+// else, including Turkish diacritics, is dropped). The Player Names screen
+// cannot type on this device (the 3DS software keyboard stub returns the
+// existing name unchanged), so the config file is the only way to set a
+// custom name. Empty when the file has no PlayerName line. A name with a
+// space is written quoted: PlayerName="Volkan Tolky".
+extern char ConfigPlayerName[12];
+
 // The port's own too: a race's frame goes to the GPU in parts as it is
 // drawn (hangwatch_gpu_sends_begin) rather than whole at C3D_FrameEnd.
 // Opt-in from 2026-10-12, on by default since 2026-10-13 (TASKS 57):
 // the GPU-bound fire on track 11 waited for the CPU's whole draw first.
-// "GpuSends 0" sends the frame whole again, should the device's GPU
+// "GpuSends=0" sends the frame whole again, should the device's GPU
 // ever stop with it.
 extern int32_t ConfigGpuSends;              // 1
 
 // The port's own: each of those sends flushes the linear heap by the
 // kernel's svcFlushProcessDataCache, not by a request to GSP that makes
 // the same call (hangwatch.c, flush_heap; TASKS 65, 2026-10-14). A 3DSX
-// from a homebrew launcher always asks GSP. "KernelFlush 0" asks GSP in
+// from a homebrew launcher always asks GSP. "KernelFlush=0" asks GSP in
 // the CIA too.
 extern int32_t ConfigKernelFlush;           // 1
 
-// The port's own: "ClusterCull 0" draws every batch whole, as before the
+// The port's own: "ClusterCull=0" draws every batch whole, as before the
 // clusters (geocull.h), for a timing run to compare (2026-10-12).
 extern int32_t ConfigClusterCull;           // 1
 
-// The port's own: "ForceChopper N" sends the helicopter after the player
+// The port's own: "ForceChopper=N" sends the helicopter after the player
 // in an R-held (SkipFE) race and has it bomb every few seconds, for
 // testing its munitions (12k-6) with no chase: 1 rockets, 2 and 3 the
 // smoke bombs, 4 the spike belt, 5 each in turn (main.c,
@@ -98,13 +108,13 @@ extern int32_t ConfigClusterCull;           // 1
 // bridge). Off by default (2026-10-12).
 extern int32_t ConfigForceChopper;          // 0
 
-// The port's own: "DebugMenu 1" shows the main menu's Debug Menu item
+// The port's own: "DebugMenu=1" shows the main menu's Debug Menu item
 // from boot, as the L + R + D-Pad Up chord does there (debugmenu.h,
 // TASKS 53). Off by default (2026-10-13).
 extern int32_t ConfigDebugMenu;             // 0
 
-// The port's own: "WirelessTest 1" hosts a local wireless network and
-// "WirelessTest 2" joins one, and the two soak the link for
+// The port's own: "WirelessTest=1" hosts a local wireless network and
+// "WirelessTest=2" joins one, and the two soak the link for
 // WirelessTestSeconds in place of the game (wirelesstest.h, TASKS 37a).
 // The host waits for WirelessTestConsoles consoles, itself among them.
 // Off by default (2026-10-14).
@@ -112,13 +122,13 @@ extern int32_t ConfigWirelessTest;          // 0
 extern int32_t ConfigWirelessTestSeconds;   // 120
 extern int32_t ConfigWirelessTestConsoles;  // 2
 
-// The port's own: "WirelessOff 1" has the Local Wireless lobby take the
+// The port's own: "WirelessOff=1" has the Local Wireless lobby take the
 // console's wireless communication as turned off (TASKS 62), as the
 // HOME Menu's setting does; Azahar's is never off. Off by default
 // (2026-10-14).
 extern int32_t ConfigWirelessOff;           // 0
 
-// The port's own: "WirelessTestFinish n" finishes a wireless race on its
+// The port's own: "WirelessTestFinish=n" finishes a wireless race on its
 // lockstep frame n, or the first one after it that is racing, on every
 // console, as if each car had crossed the line where it was
 // (racecoordinator_the_race_has_finished): the Azahar runs' way to the
@@ -130,7 +140,7 @@ extern int32_t ConfigWirelessTestFinish;    // 0
 // TASKS 37g). 0 is netstep's own, 90 s. Azahar runs set it short.
 extern int32_t ConfigWirelessHoldSeconds;   // 90
 
-// The port's own: "WirelessTestDropFrame n" has this console's wireless
+// The port's own: "WirelessTestDropFrame=n" has this console's wireless
 // hear and send nothing for WirelessTestDropMs from its lockstep frame n
 // (wireless_test_deaf), as one out of range: each end loses the link, the
 // race holds, and the console finds the host again and is taken back
@@ -139,7 +149,7 @@ extern int32_t ConfigWirelessHoldSeconds;   // 90
 extern int32_t ConfigWirelessTestDropFrame; // 0
 extern int32_t ConfigWirelessTestDropMs;    // 5000
 
-// The port's own: "WirelessTestBlindFrame n" has this console draw none of
+// The port's own: "WirelessTestBlindFrame=n" has this console draw none of
 // a wireless race's frames for WirelessTestBlindFrames from its lockstep
 // frame n, still in step and at the race's pace, as a console catching up
 // runs them (37g-3): the Azahar runs' way to what an undrawn frame changes
@@ -156,14 +166,23 @@ int32_t config_skip_fe(void);
 // The port's own, in the joylog's place: retail reads these words from a
 // joylog's channel 32, which only a development kit records (joylog.h), so
 // on a retail console they keep the image's values. The port reads a text
-// file instead, CONFIG_ITEMS_FILE, when the card has one. Each line is a
-// name above and its value, "SkipFENumAICars 3"; `#` starts a comment.
-// "SkipFE 1" turns SkipFE on as holding R does. A name it does not know,
-// or a value it cannot read, is reported and skipped. main.c reads it at
-// boot, before InitFred; with no file nothing changes.
-#define CONFIG_ITEMS_FILE "sdmc:/nfshp2_config.txt"
+// file instead, CONFIG_ITEMS_FILE, when it has one. The file is the
+// launcher's nfshp2.cfg, next to the executable (the launcher runs with
+// that folder as its working directory, so the game opens it by its bare
+// name); it is shell syntax — NFSHP2.sh sources it — so every line must
+// stay valid shell. Each line is a name above and its value,
+// "SkipFENumAICars=3"; `#` starts a comment. Spaces around '=' are
+// allowed, and a value may be wrapped in double quotes
+// (PlayerName="Volkan Tolky"). "SkipFE=1" turns SkipFE on as holding R
+// does. A name it does not know, or a value it cannot read, is reported
+// and skipped. The NFSHP2_* lines are the launcher's (the script exports
+// them); the game ignores them. main.c reads it at boot, before InitFred;
+// with no file nothing changes. The old separate file,
+// sdmc:/nfshp2_config.txt, is gone (2026-11-18, v40): its lines moved
+// here, and the game no longer reads it.
+#define CONFIG_ITEMS_FILE "nfshp2.cfg"
 
-// The port's own: "TestFinish n" finishes a race on this console alone
+// The port's own: "TestFinish=n" finishes a race on this console alone
 // (not a wireless one) n seconds after its GO: the player's car
 // crosses in place TestFinishPlace, the cars ahead of it first, and the
 // rest as SimulateRaceFinish has them (racecoordinator_the_race_has_
@@ -177,15 +196,15 @@ extern int32_t ConfigTestFinish;            // 0
 extern int32_t ConfigTestFinishPlace;       // 1
 extern int32_t ConfigTestFinishTime;        // 0
 
-// The port's own: "ReplayCheck 1" plays parts of each race back as it
+// The port's own: "ReplayCheck=1" plays parts of each race back as it
 // goes and logs what does not come out as it was captured (main.c,
 // replayCheckTick; TASKS 72f-2). The race jumps back twice: some 20
 // seconds after GO to the last lap snapshot, then to the older instant
 // replay, each played on to where the capture had got to. Needs
-// "DebugLog 1" for the log. Off by default (2026-10-17).
+// "DebugLog=1" for the log. Off by default (2026-10-17).
 extern int32_t ConfigReplayCheck;           // 0
 
-// The port's own: "DemoReplays 1" lets attract mode play the disc's six
+// The port's own: "DemoReplays=1" lets attract mode play the disc's six
 // replays (sdmc:/NFSHP2/REPLAY) as retail does. Off by default
 // (2026-10-17): the 3DS's floats are not the EE's, so a PS2 replay leaves
 // the PS2's path at its first step (72h-2c, replay.md). That frame's
@@ -194,7 +213,7 @@ extern int32_t ConfigReplayCheck;           // 0
 // attract mode is retail's other demo, the AI race (demomode.c).
 extern int32_t ConfigDemoReplays;           // 0
 
-// The port's own: "ThreadGuard 1" turns on the tripwire over the audio
+// The port's own: "ThreadGuard=1" turns on the tripwire over the audio
 // workers' thread blocks (threadguard.h), main.c's at boot. Off by
 // default at the user's word (2026-10-18, TASKS 46): the race-end crash
 // it was made for was DriveTarget::Resample's walk, fixed the day it was
@@ -202,53 +221,53 @@ extern int32_t ConfigDemoReplays;           // 0
 // 10 ms on the game's core, were 1.7 to 2.5% of Azahar's race profiles.
 extern int32_t ConfigThreadGuard;           // 0
 
-// The port's own: "CoreSample 1" has a thread on the third core sample
+// The port's own: "CoreSample=1" has a thread on the third core sample
 // where the draw is, and the log a line of the stages' and the models'
 // parts' shares each second after the frame's (coresample.h, TASKS 46).
-// Needs "DebugLog 1" for the log. Off by default (2026-10-18).
+// Needs "DebugLog=1" for the log. Off by default (2026-10-18).
 extern int32_t ConfigCoreSample;            // 0
 
-// The port's own: "GPULog 1" turns on hangwatch.h's timing frames, every
+// The port's own: "GPULog=1" turns on hangwatch.h's timing frames, every
 // 10 s of a race, each a "gpu time:" line of the draw stages' GPU times
 // and how they split. Each is a hitch of about 150 ms, so it is off by
-// default. It opens sdmc:/nfshp2_debug.txt as "DebugLog 1" does, with no
+// default. It opens sdmc:/nfshp2_debug.txt as "DebugLog=1" does, with no
 // need of that word. Until 2026-10-18 an empty sdmc:/nfshp2_gputiming.txt
 // turned the timing frames on, at the user's word a key now.
 extern int32_t ConfigGpuLog;                // 0
 
-// The port's own: "PauseLog 1" has a race keep the top screen of its last
+// The port's own: "PauseLog=1" has a race keep the top screen of its last
 // 96 frames at half size (4.5 MB of linear heap), and a pause write them
 // to sdmc:/nfshp2_pause_N.bin, each frame's numbers in the log (capture.h,
 // TASKS 64): the road's blink on the device is gone before the log's next
 // line, but the user pauses right after it. It opens sdmc:/nfshp2_debug.txt
-// as "DebugLog 1" does, for those numbers. Off unless the config file says
-// so (the user, 2026-10-20); until then "PauseFrames", on with "DebugLog 1".
+// as "DebugLog=1" does, for those numbers. Off unless the config file says
+// so (the user, 2026-10-20); until then "PauseFrames", on with "DebugLog=1".
 extern int32_t ConfigPauseLog;              // 0
 
-// The port's own: "EggCodes N" turns on, at boot, the easter egg codes
+// The port's own: "EggCodes=N" turns on, at boot, the easter egg codes
 // whose numbers are N's bits (eastereggs.h), as entering them on the main
 // menu does: 2 is Black & White, 4 Heavy Fog, 0x100 Chrome Cars. For
 // checking the render eggs (stomper.h, TASKS 50b) in an R-held race.
 // Off by default (2026-10-20).
 extern int32_t ConfigEggCodes;              // 0
 
-// The port's own: "FallLog 1" has the log a "fall:" line for every step of
+// The port's own: "FallLog=1" has the log a "fall:" line for every step of
 // the world: where player 1's car was after the move and after each of its
 // contacts (world.h's WorldFallStep), for the car the user drove through
 // the road on track 62 (2026-10-20). tools/fall_trace.py puts the road's
-// height beside each. Needs "DebugLog 1". Off by default.
+// height beside each. Needs "DebugLog=1". Off by default.
 extern int32_t ConfigFallLog;               // 0
 
-// The port's own: "DemoReplayDrift 1" has a disc replay (with "DemoReplays
+// The port's own: "DemoReplayDrift=1" has a disc replay (with "DemoReplays
 // 1") play on past its checksum misses instead of ending, and the log
 // count them: the first few with the checksum, the seed and the byte the
 // PS2 logged, then a line every 150 frames (72h-2c). 2 was the world's
 // steps run with the VFP rounding toward zero and flushing denormals, as
 // the EE does; since 2026-10-23 every step is (main.c's stepRoundToZero),
-// and 2 is 1. Needs "DebugLog 1". Off by default.
+// and 2 is 1. Needs "DebugLog=1". Off by default.
 extern int32_t ConfigDemoReplayDrift;       // 0
 
-// The port's own: "DemoReplayFile N" (with "DemoReplays 1") has attract
+// The port's own: "DemoReplayFile=N" (with "DemoReplays=1") has attract
 // mode play the disc's replay file N each time, through retail's tweaker
 // word, TweakerSnapshotFileNumber (dmreplay.h), where the first pick is
 // otherwise bRandomI(5) + 1. For running one replay again on Azahar
@@ -262,5 +281,10 @@ typedef void (*ConfigItemsLogFn)(const char *line);
 // line skipped. Answers the number of words set.
 int config_items_apply_text(const char *text, int *skipFE,
                             ConfigItemsLogFn log);
+
+// R36S: writes the Options screen's Wireless toggle (ConfigWirelessOff)
+// back into CONFIG_ITEMS_FILE, keeping every other line, so it holds
+// across boots. 1 when the file was written, 0 when it could not be.
+int config_save_wireless_off(void);
 
 #endif

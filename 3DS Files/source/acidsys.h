@@ -409,36 +409,6 @@ extern int32_t acidz;
 // ticks, NumVisibleParticles the sprites.
 void acid_system_render_effects(AcidEffectSystem *s, struct eView *view);
 
-#ifdef NFSHP2_R36S
-// The R36S's particle thinning (NFSHP2_PARTICLES, set a frame by trackview.c):
-// of the sprites that are big on the screen, which are what costs a slow GPU
-// its fill, only one in gAcidThin is drawn, each by its particle's own
-// address so that a particle stays or goes for its whole life, and the ones
-// drawn take the alpha that N layers of it would have given, 1 - (1 - a)^N.
-// 1 draws them all, as the game does. The counts are the frame's, the
-// visible sprites before and after the thinning and the screen each set
-// covers, in thousands of pixels (the 640x480's), a sprite's own area added
-// up, overlap and all.
-extern int      gAcidThin;
-extern uint32_t gAcidSprites;
-extern uint32_t gAcidDrawn;
-extern float    gAcidAreaAllK;
-extern float    gAcidAreaDrawnK;
-// The same area by half-size, in pixels: under 10, 10 to 40, 40 to 100, 100 to
-// 250, and 250 or more; and the sprites of each.
-extern float    gAcidBucketK[5];
-extern uint32_t gAcidBucketN[5];
-// The smoke budget (NFSHP2_SMOKE_BUDGET): in the player's view, the sprites
-// with a half-size of ACID_BIG_SIZE or more -- a fifth of the screen across
-// and up, a cloud the camera is in -- lie mostly over one another, so N of
-// them look much like one with the alpha above. When the last frame had more
-// of them than the budget, one in gAcidBigThin is drawn (a power of two, 1 to
-// 16, set a frame by trackview.c); gAcidBigSeen counts them, before it.
-#define ACID_BIG_SIZE 100.0f
-extern int      gAcidBigThin;
-extern uint32_t gAcidBigSeen;
-#endif
-
 // eAttachDirectData (0x00110378): a GIF packet of qwc quadwords for the
 // texture's list of the current render target, at depth z when the
 // texture sorts its alpha. NULL drops the packet.

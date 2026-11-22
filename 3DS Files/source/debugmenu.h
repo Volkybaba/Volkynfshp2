@@ -33,6 +33,12 @@
 // The fillers under the main menu's fourth and fifth rows.
 #define DEBUGMENU_FILL_4      0xca37bd3du   // "PORT_FILL_4"
 #define DEBUGMENU_FILL_5      0xca37bd3eu   // "PORT_FILL_5"
+// The filler under the main menu's sixth row (Exit Game, R36S).
+#define DEBUGMENU_FILL_6      0xca37bd3fu   // "PORT_FILL_6"
+// The filler under the Options screen's eighth row (Wireless, R36S).
+#define OPTIONS_FILL          0xca37bd40u   // "PORT_FILL_7"
+// The filler under the Language screen's eighth row (Load All, R36S).
+#define LANGUAGE_FILL         0xca37bd41u   // "PORT_FILL_L7"
 // The screen both are copied from: Be The Cop Setup.
 #define DEBUGMENU_SOURCE      0xd1eadbcau
 // Debug Menu's slots, its six rows scrolling in them; Debug Race has all
@@ -67,6 +73,10 @@ int debugmenu_revealed(void);
 // The main menu's order, for bmenu_reorder: a row's place, top first, or
 // past the last for an item that is not one of its rows.
 int debugmenu_main_rank(uint32_t itemHash);
+// The Options screen's eighth row (Wireless, R36S): its label rewritten
+// in the patched chunk, live, to "Kablosuz: Acik" or "Kablosuz: Kapali"
+// for `off` 0 or 1. Nothing when the patch did not add the row.
+void debugmenu_options_wireless_set(int off);
 // The row highlighted: the window of rows shown moved just far enough to
 // hold it, and the rows laid out again, its mask the one off. Called as
 // the highlight reaches the screen, so the brackets find the row where it
