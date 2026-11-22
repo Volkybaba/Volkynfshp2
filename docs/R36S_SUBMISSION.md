@@ -1,14 +1,14 @@
-# Submitting the R36S port to PortMaster
+# Submitting the R36S port to Volkyport
 
-Where it stands (2026-11-14). The staged folder `r36s/build/portmaster/nfshp2/`
+Where it stands (2026-11-14). The staged folder `r36s/build/volkyport/nfshp2/`
 is built from `sh r36s/build.sh` then `sh r36s/package.sh`. It passes
-PortMaster's own `tools/build_release.py --do-check` in a sparse checkout of
-PortMaster-MV-New (New 1, Broken 0, no warnings). The packaging page
-(https://portmaster.games/contribute/porting/packaging/) is followed: layout,
+Volkyport's own `tools/build_release.py --do-check` in a sparse checkout of
+Volkyport-MV-New (New 1, Broken 0, no warnings). The packaging page
+(https://volkyport.games/contribute/porting/packaging/) is followed: layout,
 name rules, `port.json`, a README with thanks, controls and compile notes,
 `gameinfo.xml`, a 640x480 `screenshot.jpg` under 100 KB, the licenses folder,
 and the launch script's order (control folder, `control.txt`, `PORT_32BIT`,
-the mod file, `get_controls`, PortMaster's patcher, `$GPTOKEYB2`,
+the mod file, `get_controls`, Volkyport's patcher, `$GPTOKEYB2`,
 `pm_platform_helper`, `pm_finish`). The launcher is about 60 lines, shaped
 like Arx's (a disc install through `utils/patcher.txt`) and flaskoman's (armhf).
 
@@ -20,10 +20,10 @@ Lines a reviewer may ask about, and the answer:
   The game reads the pad itself.
 - `nfshp2.cfg` is sourced with `set -a`: the player's settings (README) go to
   the game as environment variables. Unset, the game uses its defaults.
-- The R36S pad's mapping is appended after PortMaster's: the game's controls
-  are by button position, and PortMaster's entry for that pad is by label.
-- The launcher needs PortMaster (it stops at `source control.txt` without it),
-  like every PortMaster port.
+- The R36S pad's mapping is appended after Volkyport's: the game's controls
+  are by button position, and Volkyport's entry for that pad is by label.
+- The launcher needs Volkyport (it stops at `source control.txt` without it),
+  like every Volkyport port.
 
 ## Test matrix (the guide requires this before a pull request)
 
@@ -50,7 +50,7 @@ The older draft here named the wrong frame-counter keys, so it was removed.
 ## Pull request (draft)
 
 Title: `Add Need for Speed: Hot Pursuit 2 (nfshp2)`, against the `main` branch
-of https://github.com/PortsMaster-MV/PortMaster-MV-New (decompilation).
+of https://github.com/PortsMaster-MV/Volkyport-MV-New (decompilation).
 
 > Adds `ports/nfshp2`: the PS2 game's decompilation, by way of its New 3DS
 > port, as a 32-bit armhf program for SDL2 and OpenGL ES. Needs the player's
@@ -74,5 +74,5 @@ of https://github.com/PortsMaster-MV/PortMaster-MV-New (decompilation).
    it), post the thread, and fill in the table.
 3. Retake `screenshot.jpg` on a device if you can (640x480, under 100 KB);
    the current one is an emulated 640x480 frame with the dial face.
-4. Fork PortMaster-MV-New, copy `r36s/build/portmaster/nfshp2/` to
+4. Fork Volkyport-MV-New, copy `r36s/build/volkyport/nfshp2/` to
    `ports/nfshp2/`, run `tools/build_release.py --do-check`, open the PR.
